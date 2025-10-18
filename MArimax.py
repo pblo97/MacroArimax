@@ -1,4 +1,3 @@
-# streamlit_app.py
 import os, re
 import numpy as np
 import pandas as pd
@@ -10,19 +9,18 @@ from statsmodels.tsa.regime_switching.markov_regression import MarkovRegression
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-# --- Opcional (volatilidad) ---
+# Opcional (volatilidad)
 try:
     from arch import arch_model
     HAVE_ARCH = True
 except Exception:
     HAVE_ARCH = False
 
-# ================= UI CONFIG =================
-st.set_page_config(page_title="Macro Monitor (Streamlit)", layout="wide")
-st.title("📊 Macro Monitor — Z-Score compuesto + Regímenes + Overlay")
-st.caption("Compuesto con HY OAS y Term Spread | Markov | Overlay OOS | Métricas | Sensibilidad | (Opcional) GARCH")
+# ---------------- UI ----------------
+st.set_page_config(page_title="Macro Monitor", layout="wide")
+st.title("Macro Monitor — Z-score Compuesto, Regímenes y Overlay")
 
-# ================= HELPERS ===================
+# ---------- utilidades ----------
 def is_valid_fred_key(key: str) -> bool:
     return isinstance(key, str) and re.fullmatch(r"[a-z0-9]{32}", key or "") is not None
 
@@ -69,13 +67,9 @@ def minmax_robust(s: pd.Series) -> pd.Series:
 def plotly_line_safe(df: pd.DataFrame, y_cols, title: str, st_obj=st):
     if isinstance(y_cols, str): y_cols = [y_cols]
     y_ok = [c for c in y_cols if c in df.columns]
-    if not y_ok:
-        st_obj.warning(f"No hay columnas válidas para graficar: {y_cols}")
-        return
+    if not y_ok: return
     dfx = df[y_ok].dropna(how="all")
-    if dfx.empty:
-        st_obj.warning(f"Sin datos válidos para graficar {y_ok}.")
-        return
+    if dfx.empty: return
     if not isinstance(dfx.index, pd.DatetimeIndex):
         dfx.index = pd.to_datetime(dfx.index, errors="coerce")
     dfx = dfx.loc[dfx.index.notna()].reset_index()
@@ -83,49 +77,43 @@ def plotly_line_safe(df: pd.DataFrame, y_cols, title: str, st_obj=st):
     st_obj.plotly_chart(px.line(dfx, x=date_col, y=y_ok, title=title), use_container_width=True)
 
 def plot_return_hist(df_ret: pd.DataFrame, cols: list, title: str):
-    # apila retornos en formato largo
     df_long = df_ret[cols].dropna().melt(var_name="Serie", value_name="Ret")
     st.plotly_chart(px.histogram(df_long, x="Ret", color="Serie", nbins=60,
                                  barmode="overlay", opacity=0.55,
                                  title=title), use_container_width=True)
 
-# ================= SIDEBAR ===================
+# ---------------- sidebar ----------------
 with st.sidebar:
-    st.header("⚙️ Parámetros")
-    mode = st.radio("Modo de uso", ["Generar desde FRED", "Subir CSV ya generado"], index=0)
+    st.header("Parámetros")
+    mode = st.radio("Modo", ["Generar desde FRED", "Subir CSV"], index=0)
     freq = st.selectbox("Frecuencia", ["Semanal (W)", "Mensual (M)"], index=0)
     freq_key = "W" if freq.startswith("Semanal") else "M"
     start_date = st.date_input("Fecha inicio", value=pd.to_datetime("2010-01-01"))
-    roll_z_w = st.slider("Ventana Z-score semanal (semanas)", 26, 78, 52)
-    roll_z_m = st.slider("Ventana Z-score mensual (meses)", 18, 60, 36)
+    roll_z_w = st.slider("Ventana Z-score semanal", 26, 78, 52)
+    roll_z_m = st.slider("Ventana Z-score mensual", 18, 60, 36)
 
-    st.markdown("**Overlay (0/1)**")
+    st.markdown("Overlay (0/1)")
     thr_comp_init = st.number_input("Umbral COMPOSITE (z)", value=0.0, step=0.1, format="%.2f")
     thr_prob_init = st.number_input("Umbral Prob. Estrés Markov", value=0.40, step=0.05, format="%.2f")
 
-    st.markdown("**Exposición continua (opcional)**")
-    use_cont = st.checkbox("Usar exposición continua", value=False)
+    st.markdown("Exposición continua (opcional)")
+    use_cont = st.checkbox("Activar exposición continua", value=False)
     alpha = st.slider("Peso α (COMPOSITE)", 0.0, 1.0, 0.6, 0.05)
     beta  = st.slider("Peso β (ProbEstrés)", 0.0, 1.0, 0.4, 0.05)
     ema_k = st.slider("EMA smoothing (periodos)", 1, 24, 6)
 
-    st.markdown("**Sensibilidad**")
-    do_sens = st.checkbox("Ejecutar grid de sensibilidad", value=True)
-    st.caption("Prueba lags (mensual L=1–3), umbrales y ventanas de z-score.")
+    do_sens = st.checkbox("Ejecutar sensibilidad (ventanas y lags)", value=True)
 
-    st.markdown("---")
-    use_garch = st.checkbox("Usar GARCH (si 'arch' está instalado)", value=False and HAVE_ARCH)
-    st.caption("Con frecuencia semanal: vol semanal; anualiza con √52 si lo necesitas.")
-    st.markdown("---")
+    use_garch = st.checkbox("Usar GARCH si está instalado", value=False and HAVE_ARCH)
     fred_key_default = st.secrets.get("FRED_API_KEY", "")
     fred_key = st.text_input("FRED API key", value=fred_key_default, type="password")
-    st.caption("Configura en .streamlit/secrets.toml: FRED_API_KEY=\"...\"")
+    st.caption("En .streamlit/secrets.toml define FRED_API_KEY=\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"")
 
-# ================ DATA =======================
+# --------------- datos ---------------
 @st.cache_data(show_spinner=True)
 def fetch_fred_series(start_dt: pd.Timestamp, api_key: str) -> pd.DataFrame:
     if not is_valid_fred_key(api_key):
-        st.error("❌ FRED API key inválida (32 chars minúscula/alfanumérica).")
+        st.error("FRED API key inválida (debe ser de 32 caracteres minúscula/alfanumérica).")
         st.stop()
     from fredapi import Fred
     fred = Fred(api_key=api_key)
@@ -135,16 +123,13 @@ def fetch_fred_series(start_dt: pd.Timestamp, api_key: str) -> pd.DataFrame:
         "TB3MS": "TB3MS", "DGS3MO": "DGS3MO", "BAMLH0A0HYM2": "BAMLH0A0HYM2",
         "T10Y2Y": "T10Y2Y",
     }
-    df, failures = pd.DataFrame(), []
+    df = pd.DataFrame()
     for name, code in series.items():
-        try:
-            s = fred.get_series(code)
-            if s is not None and not s.empty: df[name] = s
-            else: failures.append(name)
-        except Exception:
-            failures.append(name)
+        s = fred.get_series(code)
+        if s is not None and not s.empty:
+            df[name] = s
     if df.empty:
-        st.error("❌ No se pudo descargar ninguna serie.")
+        st.error("No se pudo descargar ninguna serie FRED.")
         st.stop()
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index, errors="coerce")
@@ -265,9 +250,9 @@ def garch_vol_forecast(y: pd.Series, comp_l1: pd.Series):
         st.warning(f"GARCH error: {e}")
         return None
 
-# ================ MAIN FLOW =================
-if mode == "Subir CSV ya generado":
-    st.subheader("📤 Cargar bundle CSV")
+# --------------- flujo principal ---------------
+if mode == "Subir CSV":
+    st.subheader("Cargar bundle CSV")
     up = st.file_uploader("Selecciona tu macro_monitor_bundle.csv", type=["csv"])
     if up:
         df_in = pd.read_csv(up, parse_dates=True, index_col=0)
@@ -278,25 +263,23 @@ if mode == "Subir CSV ya generado":
         st.info("Sube un CSV para visualizar.")
         st.stop()
 
-st.subheader("⬇️ Descargando FRED y calculando…")
-if st.button("Ejecutar pipeline"):
-    # --------- DATA ----------
-    with st.spinner("Obteniendo series FRED…"):
+st.subheader("Descarga FRED y cálculo")
+if st.button("Ejecutar"):
+    # Datos
+    with st.spinner("Descargando series FRED…"):
         dfd = fetch_fred_series(pd.to_datetime(start_date), api_key=fred_key)
 
-    with st.spinner("Compuestos y equity premium…"):
+    with st.spinner("Construyendo compuestos y equity premium…"):
         comp_w = build_composite(dfd, freq_key, roll_z_w, roll_z_m)
         comp_p = composite_pca(dfd, freq_key, roll_z_w, roll_z_m)
         common_idx = comp_w.index.union(comp_p.index)
         comp_w = comp_w.reindex(common_idx); comp_p = comp_p.reindex(common_idx)
         y = equity_premium(dfd, freq_key)
 
-    # --------- LAGS ----------
+    # Lags
     lag_list = [1,2,3] if freq_key == "M" else [1]
     results_rows = []
-    # guardaremos retornos del mejor lag para gráficos extra
-    best_pack = None
-    best_sh = -np.inf
+    best_pack = None; best_sh = -np.inf
 
     for L in lag_list:
         comp_l = comp_w.shift(L).rename("COMP_L")
@@ -304,7 +287,7 @@ if st.button("Ejecutar pipeline"):
             prob_reg0, _ = markov_two_regimes(y, comp_l.rename("COMP_L1"))
             prob_stress = (1 - prob_reg0) if prob_reg0 is not None else pd.Series(index=y.index, dtype=float)
 
-        # Overlay grid OOS
+        # Grid overlay
         with st.spinner(f"Overlay grid OOS (lag {L})…"):
             best, signal, ret_filt = overlay_gridsearch(
                 y=y, composite=comp_l, prob_stress=prob_stress,
@@ -313,11 +296,11 @@ if st.button("Ejecutar pipeline"):
                 split=0.7
             )
 
-        # Exposición continua (opcional)
+        # Exposición continua opcional
         if use_cont:
             expo, ret_cont = continuous_exposure(y, comp_l, prob_stress, alpha=alpha, beta=beta, ema_k=ema_k)
 
-        # ====== MÉTRICAS ======
+        # Métricas
         sh_naive = sharpe(y); so_naive = sortino(y); mdd_naive = max_drawdown(y)
         sh_filt  = sharpe(ret_filt); so_filt  = sortino(ret_filt); mdd_filt  = max_drawdown(ret_filt)
         p_on = percent_on(signal); p_off = 1 - p_on
@@ -330,42 +313,58 @@ if st.button("Ejecutar pipeline"):
             "MaxDD_naive": mdd_naive, "MaxDD_filtered": mdd_filt,
             "%ON": p_on, "%OFF": p_off
         }
-
         if use_cont:
             sh_cont = sharpe(ret_cont); so_cont = sortino(ret_cont); mdd_cont = max_drawdown(ret_cont)
             row.update({"Sharpe_cont": sh_cont, "Sortino_cont": so_cont, "MaxDD_cont": mdd_cont})
 
         results_rows.append(row)
 
-        # Guardar pack si es el mejor por Sharpe filtrado
         if sh_filt > best_sh:
             best_sh = sh_filt
             best_pack = {
                 "L": L, "signal": signal, "ret_filt": ret_filt,
-                "prob_reg0": prob_reg0, "comp_w": comp_w, "comp_p": comp_p
+                "prob_reg0": prob_reg0, "comp_w": comp_w, "comp_p": comp_p,
+                "comp_l": comp_l
             }
             if use_cont:
                 best_pack.update({"expo": expo, "ret_cont": ret_cont})
 
-    # ====== PLOTS PRINCIPALES (del mejor lag) ======
-    L = best_pack["L"]
-    signal = best_pack["signal"]
-    ret_filt = best_pack["ret_filt"]
-    prob_reg0 = best_pack["prob_reg0"]
-    comp_w = best_pack["comp_w"]; comp_p = best_pack["comp_p"]
+    # ===== Métricas (arriba) =====
+    res_df = pd.DataFrame(results_rows).set_index("Lag").round(4)
+    st.markdown("### Métricas por lag")
+    st.dataframe(res_df)
 
-    c1, c2 = st.columns(2)
-    with c1:
+    # KPIs del mejor lag
+    st.markdown("### Resumen del mejor lag")
+    L = best_pack["L"]; signal = best_pack["signal"]; ret_filt = best_pack["ret_filt"]
+    sharpe_naive = float(res_df.loc[L, "Sharpe_naive"])
+    sharpe_filtered = float(res_df.loc[L, "Sharpe_filtered"])
+    sortino_naive = float(res_df.loc[L, "Sortino_naive"])
+    sortino_filtered = float(res_df.loc[L, "Sortino_filtered"])
+    mdd_naive = float(res_df.loc[L, "MaxDD_naive"])
+    mdd_filtered = float(res_df.loc[L, "MaxDD_filtered"])
+    pct_on = float(res_df.loc[L, "%ON"])
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Sharpe naïve", f"{sharpe_naive:.3f}")
+    c2.metric("Sharpe filtrado", f"{sharpe_filtered:.3f}", f"{(sharpe_filtered-sharpe_naive):+.3f}")
+    c3.metric("Sortino naïve", f"{sortino_naive:.3f}")
+    c4.metric("Sortino filtrado", f"{sortino_filtered:.3f}")
+    c5.metric("% tiempo ON", f"{100*pct_on:.1f}%")
+
+    # ===== Gráficos principales (mejor lag) =====
+    prob_reg0 = best_pack["prob_reg0"]; comp_w = best_pack["comp_w"]; comp_p = best_pack["comp_p"]
+    c6, c7 = st.columns(2)
+    with c6:
         df_comp = pd.concat([comp_w.rename("COMPOSITE_Z"), comp_p.rename("COMPOSITE_PCA")], axis=1)
-        plotly_line_safe(df_comp, ["COMPOSITE_Z","COMPOSITE_PCA"], "Composite (Weighted vs PCA)")
-    with c2:
+        plotly_line_safe(df_comp, ["COMPOSITE_Z","COMPOSITE_PCA"], "Composite (peso fijo vs PCA)")
+    with c7:
         if prob_reg0 is not None and not prob_reg0.dropna().empty:
             plotly_line_safe(prob_reg0.to_frame("P_reg0"), "P_reg0", f"Probabilidad Régimen 0 (calma) — Lag {L}")
 
-    c3, c4 = st.columns(2)
-    with c3:
+    c8, c9 = st.columns(2)
+    with c8:
         plotly_line_safe(signal.to_frame("Overlay_Signal"), "Overlay_Signal", f"Señal Overlay (0/1) — Lag {L}")
-    with c4:
+    with c9:
         df_ret = pd.concat([y.rename("Excess_Ret"), ret_filt], axis=1).dropna()
         df_plot = pd.DataFrame(index=df_ret.index)
         df_plot["EQ_naive"] = equity_curve(df_ret["Excess_Ret"])
@@ -374,54 +373,50 @@ if st.button("Ejecutar pipeline"):
             df_plot["EQ_cont"] = equity_curve(best_pack["ret_cont"])
         plotly_line_safe(df_plot, list(df_plot.columns), "Curva de capital")
 
-    # ====== GRÁFICOS EXTRA: Distribución & Drawdown ======
-    st.markdown("### 📊 Distribución de retornos (hist)")
+    # Histogramas y drawdowns
+    st.markdown("### Distribución de retornos")
     ret_cols = ["Excess_Ret", "Ret_Filtered"]
     if use_cont and "ret_cont" in best_pack: ret_cols += ["Ret_Filtered_cont"]
     plot_return_hist(pd.concat([y.rename("Excess_Ret"), ret_filt.rename("Ret_Filtered"),
                                 (best_pack.get("ret_cont") or pd.Series(dtype=float)).rename("Ret_Filtered_cont")], axis=1),
                      [c for c in ret_cols if c is not None], "Distribución de retornos")
 
-    st.markdown("### 📉 Drawdowns")
+    st.markdown("### Drawdowns")
     dd_df = pd.DataFrame({
         "DD_naive": drawdown_series(y),
         "DD_filtered": drawdown_series(ret_filt)
     })
     if use_cont and "ret_cont" in best_pack:
         dd_df["DD_cont"] = drawdown_series(best_pack["ret_cont"])
-    plotly_line_safe(dd_df, list(dd_df.columns), "Curva de drawdown (pico a valle)")
+    plotly_line_safe(dd_df, list(dd_df.columns), "Drawdown pico-a-valle")
 
-    # ====== TABLA DE RESULTADOS ======
-    res_df = pd.DataFrame(results_rows)
-    st.markdown("### 📈 Métricas por lag")
-    st.dataframe(res_df.set_index("Lag").round(3))
-
-    # ====== SENSIBILIDAD (opcional): ventanas de z-score ======
+    # Sensibilidad (opcional)
     if do_sens:
-        st.markdown("### 🔎 Sensibilidad: ventanas de z-score y lags")
+        st.markdown("### Sensibilidad: ventanas de z-score y lags")
         win_list = ([24,36,48,60] if freq_key == "M" else [26,39,52,65,78])
         sens_rows = []
         for w in win_list:
-            comp_tmp = build_composite(dfd, freq_key, roll_z_w=w if freq_key=="W" else roll_z_w,
+            comp_tmp = build_composite(dfd, freq_key,
+                                       roll_z_w=w if freq_key=="W" else roll_z_w,
                                        roll_z_m=w if freq_key=="M" else roll_z_m)
-            for L in ([1,2,3] if freq_key=="M" else [1]):
-                comp_l = comp_tmp.shift(L)
-                prob_reg0, _ = markov_two_regimes(y, comp_l.rename("COMP_L1"))
-                prob_stress = (1 - prob_reg0) if prob_reg0 is not None else pd.Series(index=y.index, dtype=float)
-                best, _, ret_filt_tmp = overlay_gridsearch(y, comp_l, prob_stress,
+            for Lx in ([1,2,3] if freq_key=="M" else [1]):
+                comp_lx = comp_tmp.shift(Lx)
+                prob_reg0_x, _ = markov_two_regimes(y, comp_lx.rename("COMP_L1"))
+                prob_stress_x = (1 - prob_reg0_x) if prob_reg0_x is not None else pd.Series(index=y.index, dtype=float)
+                best_x, _, ret_filt_x = overlay_gridsearch(y, comp_lx, prob_stress_x,
                                                            comp_grid=np.arange(-0.5, 1.01, 0.1),
                                                            pst_grid=np.arange(0.4, 0.91, 0.1),
                                                            split=0.7)
-                sens_rows.append({"window": w, "lag": L, "Sharpe_filtered": sharpe(ret_filt_tmp),
-                                  "thr_comp": best["thr_comp"], "thr_prob": best["thr_prob"]})
+                sens_rows.append({"window": w, "lag": Lx, "Sharpe_filtered": sharpe(ret_filt_x),
+                                  "thr_comp": best_x["thr_comp"], "thr_prob": best_x["thr_prob"]})
         st.dataframe(pd.DataFrame(sens_rows).sort_values("Sharpe_filtered", ascending=False).round(3))
 
-    # ====== DESCARGA BUNDLE (mejor lag) ======
-    volf = garch_vol_forecast(y, comp_w.shift(best_pack["L"]).rename("COMP_L1")) if use_garch else None
+    # Descarga bundle
+    volf = garch_vol_forecast(y, best_pack["comp_l"].rename("COMP_L1")) if use_garch else None
     bundle = pd.concat({
         "COMPOSITE_Z": comp_w,
         "COMPOSITE_PCA": comp_p,
-        "COMP_L": comp_w.shift(best_pack["L"]),
+        "COMP_L": best_pack["comp_l"],
         "P_reg0": prob_reg0 if prob_reg0 is not None else pd.Series(index=y.index, dtype=float),
         "ProbStress": (1 - prob_reg0) if prob_reg0 is not None else pd.Series(index=y.index, dtype=float),
         "Overlay_Signal": signal.astype(int),
@@ -432,10 +427,12 @@ if st.button("Ejecutar pipeline"):
         "DD_filtered": drawdown_series(ret_filt),
     }, axis=1)
 
-    st.markdown("### 📦 Descargar `macro_monitor_bundle.csv`")
-    st.download_button("💾 Descargar CSV",
+    st.markdown("### Descargar CSV")
+    st.download_button(
+        "Descargar macro_monitor_bundle.csv",
         data=bundle.to_csv(index=True).encode("utf-8"),
         file_name="macro_monitor_bundle.csv",
-        mime="text/csv")
+        mime="text/csv"
+    )
 else:
-    st.info("Configura la API key de FRED, ajusta parámetros y haz clic en **Ejecutar pipeline**.")
+    st.info("Configura la API key de FRED, ajusta parámetros y presiona Ejecutar.")
