@@ -1,4 +1,6 @@
+# streamlit_app.py
 import os
+import re
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -23,6 +25,25 @@ st.set_page_config(page_title="Macro Monitor (Streamlit)", layout="wide")
 st.title("📊 Macro Monitor — Z-Score compuesto + Regímenes + Overlay")
 st.caption("Inversiones - Macro | Compuesto con HY OAS y Term Spread | Markov | Overlay OOS | (Opcional) GARCH")
 
+# ----------------- HELPERS -------------------
+def is_valid_fred_key(key: str) -> bool:
+    """FRED requiere 32 chars minúscula alfanumérica."""
+    return isinstance(key, str) and re.fullmatch(r"[a-z0-9]{32}", key or "") is not None
+
+def winsorize(s: pd.Series, p: float = 0.01) -> pd.Series:
+    if s.dropna().empty:
+        return s
+    lo, hi = s.quantile(p), s.quantile(1 - p)
+    return s.clip(lo, hi)
+
+def zscore(s: pd.Series, window: int) -> pd.Series:
+    roll = s.rolling(window, min_periods=window)
+    return (s - roll.mean()) / roll.std()
+
+def sharpe(x: pd.Series) -> float:
+    x = x.dropna()
+    return (x.mean() / x.std()) if x.std() != 0 else np.nan
+
 # ----------------- SIDEBAR -------------------
 with st.sidebar:
     st.header("⚙️ Parámetros")
@@ -40,29 +61,25 @@ with st.sidebar:
     use_garch = st.checkbox("Usar GARCH (si 'arch' está instalado)", value=False and HAVE_ARCH)
     annual_target_vol = st.number_input("Target Vol anual (p.ej. 0.15)", value=0.15, step=0.01, format="%.2f")
     st.markdown("---")
-    st.info("🔑 Agrega tu FRED API key en `st.secrets['FRED_API_KEY']`", icon="🔐")
-    st.caption("En Streamlit Cloud, configúralo en la sección Secrets.\nLocal: crea `.streamlit/secrets.toml` con FRED_API_KEY=\"tu_key\"")
-
-# ----------------- UTILS ---------------------
-def winsorize(s: pd.Series, p: float = 0.01) -> pd.Series:
-    if s.dropna().empty:
-        return s
-    lo, hi = s.quantile(p), s.quantile(1 - p)
-    return s.clip(lo, hi)
-
-def zscore(s: pd.Series, window: int) -> pd.Series:
-    roll = s.rolling(window, min_periods=window)
-    return (s - roll.mean()) / roll.std()
-
-def sharpe(x: pd.Series) -> float:
-    x = x.dropna()
-    return (x.mean() / x.std()) if x.std() != 0 else np.nan
+    fred_key_default = st.secrets.get("FRED_API_KEY", "")
+    fred_key = st.text_input(
+        "FRED API key",
+        value=fred_key_default,
+        type="password",
+        help="Clave de 32 caracteres minúscula/alfanumérica. Configúrala en .streamlit/secrets.toml o en Secrets del Cloud.",
+    )
 
 # ----------------- DATA ----------------------
 @st.cache_data(show_spinner=True)
-def fetch_fred_series(start_dt: pd.Timestamp) -> pd.DataFrame:
+def fetch_fred_series(start_dt: pd.Timestamp, api_key: str) -> pd.DataFrame:
+    # Validación de la key antes de llamar a FRED
+    if not is_valid_fred_key(api_key):
+        st.error("❌ FRED API key inválida. Debe tener 32 caracteres, minúscula y alfanumérica.")
+        st.stop()
+
     from fredapi import Fred
-    fred = Fred(api_key=st.secrets.get("FRED_API_KEY", ""))
+    fred = Fred(api_key=api_key)
+
     series = {
         "SOFR": "SOFR",
         "RRP": "RRPONTSYD",
@@ -77,18 +94,41 @@ def fetch_fred_series(start_dt: pd.Timestamp) -> pd.DataFrame:
         "BAMLH0A0HYM2": "BAMLH0A0HYM2",  # HY OAS (%)
         "T10Y2Y": "T10Y2Y",               # 10y-2y (pp)
     }
+
     df = pd.DataFrame()
+    failures = []
+
     for name, code in series.items():
         try:
-            df[name] = fred.get_series(code)
+            s = fred.get_series(code)
+            if s is not None and not s.empty:
+                df[name] = s
+            else:
+                failures.append(name)
         except Exception as e:
+            failures.append(name)
             st.warning(f"FRED {name}: {e}")
-    df.index.name = "Date"
-    df = df.loc[df.index >= pd.to_datetime(start_dt)]
+
+    if df.empty:
+        st.error("❌ No se pudo descargar ninguna serie. Revisa la API key o la conexión.")
+        st.stop()
+
+    # Asegurar índice datetime y filtrar por fecha
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index, errors="coerce")
+    df = df.loc[df.index.notna()]
+    if isinstance(start_dt, (pd.Timestamp,)) and not df.empty:
+        df = df.loc[df.index >= pd.to_datetime(start_dt)]
+
+    # Diario + features derivados
     dfd = df.resample("D").last().ffill()
     dfd["diferencial_colateral"] = dfd["EFFR"] - dfd["SOFR"]
     dfd["sofr_spread"] = dfd["OBFR"] - dfd["SOFR"]
     dfd = dfd.rename(columns={"RRP": "Reverse_Repo_Volume", "TGA": "WTREGEN"})
+
+    if failures:
+        st.info(f"ℹ️ Series omitidas: {', '.join(failures)}")
+
     return dfd
 
 def build_composite(dfd: pd.DataFrame, freq_key: str, roll_z_w: int, roll_z_m: int) -> pd.Series:
@@ -133,8 +173,7 @@ def composite_pca(dfd: pd.DataFrame, freq_key: str, roll_z_w: int, roll_z_m: int
         window = roll_z_m
 
     FACTORES = ["NFCI","STLFSI4","BAMLH0A0HYM2","T10Y2Y","diferencial_colateral","Reverse_Repo_Volume","WTREGEN","sofr_spread"]
-    Zs = []
-    names = []
+    Zs, names = [], []
     for fac in FACTORES:
         if fac not in df.columns: 
             continue
@@ -256,15 +295,19 @@ if mode == "Subir CSV ya generado":
 # --- Generar desde FRED ---
 st.subheader("⬇️ Descargando FRED y calculando…")
 if st.button("Ejecutar pipeline"):
+    # Checks rápidos (evita llamadas inválidas/cache corrupto)
+    st.write("Secret presente:", "FRED_API_KEY" in st.secrets)
+    st.write("Formato válido:", is_valid_fred_key(fred_key))
+
     with st.spinner("Obteniendo series FRED…"):
-        dfd = fetch_fred_series(pd.to_datetime(start_date))
+        dfd = fetch_fred_series(pd.to_datetime(start_date), api_key=fred_key)
 
     with st.spinner("Construyendo compuestos y equity premium…"):
         comp_w = build_composite(dfd, freq_key, roll_z_w, roll_z_m)
         comp_p = composite_pca(dfd, freq_key, roll_z_w, roll_z_m)
         y = equity_premium(dfd, freq_key)
 
-    # Lag 3 sugerido por Granger
+    # Lag 3 (consistente con Granger)
     comp_l3 = comp_w.shift(3).rename("COMP_L3").reindex(y.index)
 
     with st.spinner("Markov (2 regímenes)…"):
