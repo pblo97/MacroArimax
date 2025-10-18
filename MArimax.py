@@ -62,7 +62,7 @@ def sharpe(x: pd.Series) -> float:
 @st.cache_data(show_spinner=True)
 def fetch_fred_series(start_dt: pd.Timestamp) -> pd.DataFrame:
     from fredapi import Fred
-    fred = Fred(api_key=st.secrets.get("FRED_API_KEY", ""))
+    fred = Fred(api_key=st.secrets.get("qGDE52LhIJ9CQSyRwKpAzjLXeLP4Pwkt", ""))
     series = {
         "SOFR": "SOFR",
         "RRP": "RRPONTSYD",
