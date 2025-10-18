@@ -1,0 +1,8 @@
+streamlit
+pandas
+numpy
+statsmodels
+scikit-learn
+fredapi
+plotly
+plotly>=5.18
