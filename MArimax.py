@@ -7,7 +7,6 @@ import plotly.express as px
 import streamlit as st
 
 import statsmodels.api as sm
-from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.regime_switching.markov_regression import MarkovRegression
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
@@ -43,6 +42,28 @@ def zscore(s: pd.Series, window: int) -> pd.Series:
 def sharpe(x: pd.Series) -> float:
     x = x.dropna()
     return (x.mean() / x.std()) if x.std() != 0 else np.nan
+
+def plotly_line_safe(df: pd.DataFrame, y_cols, title: str, st_obj=st):
+    """Dibuja un line chart robusto: valida columnas, limpia NaN y detecta columna de fecha."""
+    if isinstance(y_cols, str):
+        y_cols = [y_cols]
+    y_ok = [c for c in y_cols if c in df.columns]
+    if not y_ok:
+        st_obj.warning(f"No hay columnas válidas para graficar: {y_cols}")
+        return
+    dfx = df[y_ok].dropna(how="all")
+    if dfx.empty:
+        st_obj.warning(f"Sin datos válidos para graficar {y_ok}.")
+        return
+    if not isinstance(dfx.index, pd.DatetimeIndex):
+        try:
+            dfx.index = pd.to_datetime(dfx.index, errors="coerce")
+        except Exception:
+            pass
+    dfx = dfx.loc[dfx.index.notna()].reset_index()
+    date_col = "Date" if "Date" in dfx.columns else dfx.columns[0]
+    fig = px.line(dfx, x=date_col, y=y_ok, title=title)
+    st_obj.plotly_chart(fig, use_container_width=True)
 
 # ----------------- SIDEBAR -------------------
 with st.sidebar:
@@ -275,10 +296,10 @@ if mode == "Subir CSV ya generado":
         # Gráficos rápidos
         c1, c2 = st.columns(2)
         with c1:
-            st.plotly_chart(px.line(df_in.reset_index(), x=df_in.index.name, y=["COMPOSITE_Z","COMPOSITE_PCA"], title="Composite (Weighted vs PCA)"), use_container_width=True)
+            plotly_line_safe(df_in, ["COMPOSITE_Z","COMPOSITE_PCA"], "Composite (Weighted vs PCA)")
         with c2:
             if "P_reg0" in df_in.columns:
-                st.plotly_chart(px.line(df_in.reset_index(), x=df_in.index.name, y="P_reg0", title="Prob. Régimen 0 (calma)"), use_container_width=True)
+                plotly_line_safe(df_in[["P_reg0"]], "P_reg0", "Prob. Régimen 0 (calma)")
         # KPIs
         if {"Ret_Filtered","Excess_Ret"}.issubset(df_in.columns):
             k1, k2, k3 = st.columns(3)
@@ -295,16 +316,17 @@ if mode == "Subir CSV ya generado":
 # --- Generar desde FRED ---
 st.subheader("⬇️ Descargando FRED y calculando…")
 if st.button("Ejecutar pipeline"):
-    # Checks rápidos (evita llamadas inválidas/cache corrupto)
-    st.write("Secret presente:", "FRED_API_KEY" in st.secrets)
-    st.write("Formato válido:", is_valid_fred_key(fred_key))
-
     with st.spinner("Obteniendo series FRED…"):
         dfd = fetch_fred_series(pd.to_datetime(start_date), api_key=fred_key)
 
     with st.spinner("Construyendo compuestos y equity premium…"):
         comp_w = build_composite(dfd, freq_key, roll_z_w, roll_z_m)
         comp_p = composite_pca(dfd, freq_key, roll_z_w, roll_z_m)
+        # alinear índices para gráficos más completos
+        common_idx = comp_w.index.union(comp_p.index)
+        comp_w = comp_w.reindex(common_idx)
+        comp_p = comp_p.reindex(common_idx)
+
         y = equity_premium(dfd, freq_key)
 
     # Lag 3 (consistente con Granger)
@@ -338,25 +360,30 @@ if st.button("Ejecutar pipeline"):
     k2.metric("Sharpe filtrado (overlay)", f"{sharpe_filtered:.3f}")
     k3.metric("Mejora", f"{(sharpe_filtered - sharpe_naive):.3f}")
 
-    # Gráficos
+    # Gráficos (robustos)
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(px.line(pd.concat([comp_w, comp_p], axis=1).reset_index(),
-                                x="Date", y=["COMPOSITE_Z","COMPOSITE_PCA"],
-                                title="Composite (Weighted vs PCA)"), use_container_width=True)
+        df_comp = pd.concat([comp_w.rename("COMPOSITE_Z"), comp_p.rename("COMPOSITE_PCA")], axis=1)
+        plotly_line_safe(df_comp, ["COMPOSITE_Z","COMPOSITE_PCA"], "Composite (Weighted vs PCA)")
     with c2:
-        if prob_reg0 is not None:
-            st.plotly_chart(px.line(prob_reg0.reset_index(), x="Date", y="P_reg0",
-                                    title="Probabilidad Régimen 0 (calma)"), use_container_width=True)
+        if prob_reg0 is not None and not prob_reg0.dropna().empty:
+            df_prob = prob_reg0.to_frame(name="P_reg0")
+            plotly_line_safe(df_prob, "P_reg0", "Probabilidad Régimen 0 (calma)")
+        else:
+            st.info("Probabilidad de régimen no disponible.")
 
     c3, c4 = st.columns(2)
     with c3:
-        st.plotly_chart(px.line(signal.reset_index(), x="Date", y="Overlay_Signal", title="Señal Overlay (0/1)"), use_container_width=True)
+        df_sig = signal.to_frame(name="Overlay_Signal")
+        plotly_line_safe(df_sig, "Overlay_Signal", "Señal Overlay (0/1)")
     with c4:
         df_ret = pd.concat([y.rename("Excess_Ret"), ret_filt], axis=1).dropna()
-        df_ret["EQ_naive"] = (1 + df_ret["Excess_Ret"]).cumprod()
-        df_ret["EQ_filtered"] = (1 + df_ret["Ret_Filtered"]).cumprod()
-        st.plotly_chart(px.line(df_ret.reset_index(), x="Date", y=["EQ_naive","EQ_filtered"], title="Curva de capital"), use_container_width=True)
+        if not df_ret.empty:
+            df_ret["EQ_naive"] = (1 + df_ret["Excess_Ret"]).cumprod()
+            df_ret["EQ_filtered"] = (1 + df_ret["Ret_Filtered"]).cumprod()
+            plotly_line_safe(df_ret[["EQ_naive","EQ_filtered"]], ["EQ_naive","EQ_filtered"], "Curva de capital")
+        else:
+            st.info("No hay retornos para graficar curva de capital.")
 
     # --- Construir bundle y descarga ---
     bundle = pd.concat({
