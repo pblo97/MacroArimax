@@ -67,11 +67,17 @@ with st.sidebar:
 
     # Actions
     st.markdown("---")
-    run_analysis = st.button("🚀 Run Analysis", type="primary")
+    if st.button("🚀 Run Analysis", type="primary"):
+        st.session_state.run_analysis = True
+
+    # Add reset button
+    if st.button("🔄 Reset", type="secondary"):
+        st.session_state.run_analysis = False
+        st.rerun()
 
 
 # Main content
-if run_analysis:
+if st.session_state.get('run_analysis', False):
     if not fred_api_key:
         st.error("Please provide a FRED API key")
         st.stop()
