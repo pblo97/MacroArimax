@@ -23,7 +23,7 @@ from macro_plumbing.models.cusum_ewma import CUSUM, EWMA
 from macro_plumbing.models.changepoints import detect_changepoints
 from macro_plumbing.models.anomalies import detect_anomalies
 from macro_plumbing.models.fusion import SignalFusion
-from macro_plumbing.graph.graph_builder import build_liquidity_graph
+from macro_plumbing.graph.graph_builder import build_liquidity_graph, create_interactive_graph_plotly
 
 
 # Page config
@@ -235,20 +235,45 @@ if run_analysis:
 
         # Build graph
         graph = build_liquidity_graph(df)
-        nodes_df, edges_df = graph.to_dataframe()
 
+        # Interactive graph visualization
+        st.subheader("Visualización Interactiva")
+        try:
+            fig_graph = create_interactive_graph_plotly(graph)
+            st.plotly_chart(fig_graph, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error creando visualización: {e}")
+            st.info("💡 Mostrando vista de tablas como alternativa")
+
+        # Expandable detailed tables
+        with st.expander("📊 Ver Tablas Detalladas"):
+            nodes_df, edges_df = graph.to_dataframe()
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.subheader("Nodos (Entidades)")
+                st.dataframe(nodes_df, use_container_width=True)
+
+            with col2:
+                st.subheader("Flujos (Drenajes/Inyecciones)")
+                st.dataframe(edges_df, use_container_width=True)
+
+        # Key insights
+        st.subheader("🎯 Insights Clave")
         col1, col2 = st.columns(2)
 
         with col1:
-            st.subheader("Nodos (Entidades)")
-            st.dataframe(nodes_df)
+            st.markdown("**Top Drenajes (Sinks):**")
+            sinks = graph.get_sinks(top_n=3)
+            for sink in sinks:
+                st.markdown(f"- {sink}")
 
         with col2:
-            st.subheader("Flujos (Drenajes/Inyecciones)")
-            st.dataframe(edges_df)
-
-        # Visualization (simplified)
-        st.info("💡 Grafo interactivo: Para visualización completa, considere usar pyvis o Cytoscape")
+            st.markdown("**Top Fuentes (Sources):**")
+            sources = graph.get_sources(top_n=3)
+            for source in sources:
+                st.markdown(f"- {source}")
 
     # ==================
     # Tab 4: Backtest
