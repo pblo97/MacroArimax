@@ -27,8 +27,11 @@ class LiquidityNetworkAnalysis:
         graph : nx.DiGraph
             Liquidity flow graph
         """
-        self.graph = graph
-        self.nodes = list(graph.nodes())
+        # Store original graph reference
+        self._original_graph = graph
+        # Create a working copy to avoid modifying original
+        self.graph = graph.copy()
+        self.nodes = list(self.graph.nodes())
         self.n_nodes = len(self.nodes)
 
     def compute_min_cut(
@@ -56,9 +59,10 @@ class LiquidityNetworkAnalysis:
         tuple
             (cut_value, cut_edges)
         """
-        # Get capacities
+        # Get capacities - convert to list first
+        edges_data = list(self.graph.edges(data=True))
         capacities = {}
-        for u, v, data in self.graph.edges(data=True):
+        for u, v, data in edges_data:
             capacity = data.get(capacity_attr, 1.0)
             capacities[(u, v)] = abs(capacity)
 
@@ -78,7 +82,9 @@ class LiquidityNetworkAnalysis:
             reachable, non_reachable = partition
             cut_edges = []
 
-            for u, v in self.graph.edges():
+            # Convert to list to avoid iteration issues
+            edges_list = list(self.graph.edges())
+            for u, v in edges_list:
                 if u in reachable and v in non_reachable:
                     cut_edges.append((u, v))
 
@@ -188,15 +194,17 @@ class LiquidityNetworkAnalysis:
 
         # PageRank (weighted by flow)
         try:
-            # Create weight dict
+            # Create weight dict - convert to list first to avoid iteration issues
+            edges_data = list(self.graph.edges(data=True))
             edge_weights = {
                 (u, v): abs(data.get('flow', 1))
-                for u, v, data in self.graph.edges(data=True)
+                for u, v, data in edges_data
             }
             nx.set_edge_attributes(self.graph, edge_weights, 'weight')
 
             pagerank = nx.pagerank(self.graph, weight='weight', alpha=0.85)
-        except:
+        except Exception as e:
+            # Fallback to uniform distribution
             pagerank = {node: 1.0 / self.n_nodes for node in self.nodes}
 
         # Betweenness centrality (how often node is on shortest path)
