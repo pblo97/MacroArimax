@@ -111,8 +111,11 @@ class LiquidityNetworkAnalysis:
         # Compute baseline connectivity
         baseline_connectivity = self._compute_avg_connectivity()
 
+        # Convert to list to avoid "dictionary changed during iteration" error
+        edges_list = list(self.graph.edges())
+
         # Test each edge
-        for u, v in self.graph.edges():
+        for u, v in edges_list:
             # Temporarily remove edge
             edge_data = self.graph[u][v].copy()
             self.graph.remove_edge(u, v)

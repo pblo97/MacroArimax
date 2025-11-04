@@ -369,23 +369,42 @@ if run_analysis:
 
                 # Shock simulation
                 st.subheader("💥 Simulación de Shock")
-                shock_node = st.selectbox("Selecciona nodo para shock:", list(graph.G.nodes()))
 
-                if st.button("Simular Shock"):
-                    shock_result = contagion.simulate_shock(
-                        shock_node=shock_node,
-                        shock_magnitude=1.0,
-                        steps=5
-                    )
+                with st.form("shock_simulation"):
+                    shock_node = st.selectbox("Selecciona nodo para shock:", list(graph.G.nodes()))
+                    shock_magnitude = st.slider("Magnitud del shock:", 0.1, 2.0, 1.0, 0.1)
+                    shock_steps = st.slider("Pasos de simulación:", 1, 10, 5, 1)
+                    submit_shock = st.form_submit_button("🚀 Simular Shock")
 
-                    fig_shock = px.line(
-                        shock_result,
-                        x='step',
-                        y=[col for col in shock_result.columns if col != 'step'],
-                        title=f"Propagación de Shock desde {shock_node}",
-                        labels={'value': 'Stress', 'variable': 'Nodo'}
-                    )
-                    st.plotly_chart(fig_shock, use_container_width=True)
+                if submit_shock:
+                    with st.spinner("Simulando propagación de shock..."):
+                        shock_result = contagion.simulate_shock(
+                            shock_node=shock_node,
+                            shock_magnitude=shock_magnitude,
+                            steps=shock_steps
+                        )
+
+                        fig_shock = px.line(
+                            shock_result,
+                            x='step',
+                            y=[col for col in shock_result.columns if col != 'step'],
+                            title=f"Propagación de Shock desde {shock_node} (magnitud {shock_magnitude}x)",
+                            labels={'value': 'Stress', 'variable': 'Nodo'}
+                        )
+                        st.plotly_chart(fig_shock, use_container_width=True)
+
+                        # Show final state
+                        st.subheader("Estado Final del Sistema")
+                        final_state = shock_result.iloc[-1]
+                        final_df = pd.DataFrame([
+                            {
+                                'Nodo': col,
+                                'Stress Final': f"{final_state[col]:.2%}",
+                                'Estado': '🔴 Alto' if final_state[col] > 0.7 else '🟡 Medio' if final_state[col] > 0.3 else '🟢 Bajo'
+                            }
+                            for col in shock_result.columns if col != 'step'
+                        ])
+                        st.dataframe(final_df, use_container_width=True, hide_index=True)
 
             except Exception as e:
                 st.error(f"Error en análisis de contagio: {e}")
