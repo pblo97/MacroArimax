@@ -117,8 +117,19 @@ if run_analysis:
 
             # 2. CUSUM on key spread
             if "sofr_effr_spread" in df.columns:
-                cusum = CUSUM(k=0.5, h=4.0)
-                cusum_alarm = cusum.get_signals(df["sofr_effr_spread"].dropna())
+                spread = df["sofr_effr_spread"].dropna()
+                if len(spread) > 30:
+                    # Use data-driven parameters
+                    spread_mean = spread.mean()
+                    spread_std = spread.std()
+                    # k = 0.5 * std (detect shift of 0.5 sigma)
+                    # h = 4 * std (alarm threshold)
+                    cusum = CUSUM(target_mean=spread_mean, k=0.5 * spread_std, h=4.0 * spread_std)
+                    cusum_alarm = cusum.get_signals(spread)
+                    # Reindex to match df
+                    cusum_alarm = cusum_alarm.reindex(df.index, fill_value=0)
+                else:
+                    cusum_alarm = pd.Series(0, index=df.index)
             else:
                 cusum_alarm = pd.Series(0, index=df.index)
 
@@ -130,8 +141,17 @@ if run_analysis:
                 anomaly_flag = pd.Series(0, index=df.index)
 
             # 4. Net Liquidity stress
-            nl_stress = (nl_df["net_liquidity"].rank(pct=True) < 0.2).astype(int)
+            # Use rolling percentile to detect when NL is in bottom 20%
+            nl_series = nl_df["net_liquidity"]
+            # Rolling rank over past year (252 days) or available data
+            window_size = min(252, len(nl_series))
+            nl_rolling_pct = nl_series.rolling(window=window_size, min_periods=30).apply(
+                lambda x: (x.iloc[-1] <= x.quantile(0.2)).astype(int) if len(x) > 0 else 0
+            )
+            nl_stress = nl_rolling_pct.fillna(0).astype(int)
             nl_stress.name = "nl_stress"
+            # Reindex to match df
+            nl_stress = nl_stress.reindex(df.index, fill_value=0)
 
         # Fuse signals
         signals = pd.DataFrame({
