@@ -23,7 +23,8 @@ from macro_plumbing.models.cusum_ewma import CUSUM, EWMA
 from macro_plumbing.models.changepoints import detect_changepoints
 from macro_plumbing.models.anomalies import detect_anomalies
 from macro_plumbing.models.fusion import SignalFusion
-from macro_plumbing.graph.graph_builder import build_liquidity_graph, create_interactive_graph_plotly
+from macro_plumbing.graph.graph_builder import build_liquidity_graph
+from macro_plumbing.graph.visualization import create_interactive_graph_plotly
 
 
 # Page config
