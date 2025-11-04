@@ -1,0 +1,222 @@
+# series_map.yaml
+# Configuración de series FRED para el sistema de liquidez
+
+# ==========================
+# Core Plumbing Indicators
+# ==========================
+core_plumbing:
+  SOFR:
+    code: "SOFR"
+    description: "Secured Overnight Financing Rate"
+    transform: "level"
+    winsorize: true
+    category: "rates"
+
+  EFFR:
+    code: "EFFR"
+    description: "Effective Federal Funds Rate"
+    transform: "level"
+    winsorize: true
+    category: "rates"
+
+  OBFR:
+    code: "OBFR"
+    description: "Overnight Bank Funding Rate"
+    transform: "level"
+    winsorize: true
+    category: "rates"
+
+  TGCR:
+    code: "TGCR"
+    description: "Tri-Party General Collateral Rate"
+    transform: "level"
+    winsorize: true
+    category: "rates"
+
+  # RRP & Fed Balance Sheet
+  RRP:
+    code: "RRPONTSYD"
+    description: "Overnight Reverse Repo (ON RRP)"
+    transform: "level"
+    winsorize: true
+    category: "fed_balance_sheet"
+
+  TGA:
+    code: "WTREGEN"
+    description: "Treasury General Account"
+    transform: "level"
+    winsorize: true
+    category: "fed_balance_sheet"
+
+  RESERVES:
+    code: "TOTRESNS"
+    description: "Total Reserves of Depository Institutions"
+    transform: "level"
+    winsorize: true
+    category: "fed_balance_sheet"
+
+  WALCL:
+    code: "WALCL"
+    description: "Fed Assets: Total Assets"
+    transform: "level"
+    winsorize: true
+    category: "fed_balance_sheet"
+
+# ==========================
+# Stress Indicators
+# ==========================
+stress_indicators:
+  NFCI:
+    code: "NFCI"
+    description: "Chicago Fed National Financial Conditions Index"
+    transform: "level"
+    winsorize: true
+    category: "stress"
+
+  STLFSI4:
+    code: "STLFSI4"
+    description: "St. Louis Fed Financial Stress Index"
+    transform: "level"
+    winsorize: true
+    category: "stress"
+
+  HY_OAS:
+    code: "BAMLH0A0HYM2"
+    description: "ICE BofA US High Yield OAS"
+    transform: "level"
+    winsorize: true
+    category: "credit"
+
+  T10Y2Y:
+    code: "T10Y2Y"
+    description: "10-Year Treasury Constant Maturity Minus 2-Year"
+    transform: "level"
+    winsorize: true
+    category: "term_structure"
+
+  VIX:
+    code: "VIXCLS"
+    description: "CBOE Volatility Index"
+    transform: "level"
+    winsorize: true
+    category: "volatility"
+
+# ==========================
+# Reference Rates
+# ==========================
+reference_rates:
+  TB3MS:
+    code: "TB3MS"
+    description: "3-Month Treasury Bill Secondary Market Rate"
+    transform: "level"
+    winsorize: false
+    category: "risk_free"
+
+  DGS3MO:
+    code: "DGS3MO"
+    description: "3-Month Treasury Constant Maturity Rate"
+    transform: "level"
+    winsorize: false
+    category: "risk_free"
+
+  DGS10:
+    code: "DGS10"
+    description: "10-Year Treasury Constant Maturity Rate"
+    transform: "level"
+    winsorize: false
+    category: "risk_free"
+
+# ==========================
+# Market Indicators
+# ==========================
+market_indicators:
+  SP500:
+    code: "SP500"
+    description: "S&P 500 Index"
+    transform: "level"
+    winsorize: false
+    category: "equity"
+
+  MOVE:
+    code: "MOVE"
+    description: "ICE BofA MOVE Index (Bond Volatility)"
+    transform: "level"
+    winsorize: true
+    category: "volatility"
+    optional: true  # May not always be available
+
+# ==========================
+# Derived Features Configuration
+# ==========================
+derived_features:
+  # Spreads
+  sofr_effr_spread:
+    formula: "SOFR - EFFR"
+    description: "SOFR-EFFR spread (collateral premium)"
+
+  obfr_sofr_spread:
+    formula: "OBFR - SOFR"
+    description: "OBFR-SOFR spread"
+
+  tgcr_sofr_spread:
+    formula: "TGCR - SOFR"
+    description: "TGCR-SOFR spread"
+
+  # Net Liquidity
+  net_liquidity:
+    formula: "RESERVES - TGA - RRP"
+    description: "Net Liquidity (Yardeni-style)"
+
+  # Changes (for diff transforms)
+  delta_rrp:
+    formula: "diff(RRP)"
+    description: "Daily change in ON RRP"
+
+  delta_tga:
+    formula: "diff(TGA)"
+    description: "Daily change in TGA"
+
+  delta_reserves:
+    formula: "diff(RESERVES)"
+    description: "Daily change in Reserves"
+
+  delta_net_liquidity:
+    formula: "diff(net_liquidity)"
+    description: "Daily change in Net Liquidity"
+
+# ==========================
+# Calendar & Event Flags
+# ==========================
+calendar_events:
+  month_end:
+    description: "Last business day of month"
+    type: "boolean"
+
+  quarter_end:
+    description: "Last business day of quarter"
+    type: "boolean"
+
+  year_end:
+    description: "Last business day of year"
+    type: "boolean"
+
+  fomc_week:
+    description: "Week containing FOMC announcement"
+    type: "boolean"
+    optional: true
+
+# ==========================
+# Processing Configuration
+# ==========================
+processing:
+  default_start_date: "2010-01-01"
+  cache_directory: ".fred_cache"
+  cache_days: 30
+  winsorize_percentile: 0.01
+  resample_frequencies:
+    - "D"  # Daily
+    - "W"  # Weekly
+    - "M"  # Monthly
+  rolling_windows:
+    weekly: 52
+    monthly: 36
