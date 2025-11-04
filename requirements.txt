@@ -1,38 +1,24 @@
-# Core
-pandas==2.2.2
-numpy==1.26.4
-scipy==1.11.4
+# Optimized for Streamlit Cloud - uses precompiled wheels
+# Version constraints removed to allow pip to choose compatible versions
+
+# Web app (put first for faster feedback)
+streamlit
+
+# Core data science stack
+pandas
+numpy
+scipy
 
 # Statistical modeling
-statsmodels==0.14.2
-scikit-learn==1.4.2
-pmdarima==2.0.4
+statsmodels
+scikit-learn
 
-# Time series & regime switching
-arch==6.4.0
+# Specialized tools
+ruptures
+networkx
+fredapi
+plotly
+pyyaml
 
-# Change-point detection
-ruptures==1.1.9
-
-# Graph/Network analysis
-networkx==3.3
-pyvis==0.3.2
-
-# Data fetching
-fredapi==0.5.1
-requests==2.32.3
-
-# Visualization
-plotly==5.22.0
-matplotlib==3.8.4
-seaborn==0.13.2
-
-# Web app
-streamlit==1.39.0
-
-# Explainability (opcional; puede fallar por binarios)
-shap==0.44.1
-
-# Utilities
-pyyaml==6.0.2
-python-dateutil==2.9.0.post0
+# Optional (lightweight)
+pyvis

@@ -1,0 +1,18 @@
+# Minimal requirements for Streamlit Cloud
+# This version is optimized for fast deployment with precompiled wheels
+
+# Core
+streamlit
+pandas
+numpy
+
+# Stats (essential for models)
+statsmodels
+scikit-learn
+
+# Specific tools
+ruptures
+networkx
+fredapi
+plotly
+pyyaml
