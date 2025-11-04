@@ -55,6 +55,21 @@ core_plumbing:
     winsorize: true
     category: "fed_balance_sheet"
 
+  BANK_RESERVES_WEEKLY:
+    code: "WRESBAL"
+    description: "Reserve Balances with Federal Reserve Banks (Weekly H.4.1)"
+    transform: "level"
+    winsorize: true
+    category: "fed_balance_sheet"
+
+  FHLB_ADVANCES:
+    code: "FHLBADVANCES"
+    description: "FHLB Advances Outstanding"
+    transform: "level"
+    winsorize: true
+    category: "banking"
+    optional: true
+
   WALCL:
     code: "WALCL"
     description: "Fed Assets: Total Assets"
@@ -183,6 +198,18 @@ derived_features:
   delta_net_liquidity:
     formula: "diff(net_liquidity)"
     description: "Daily change in Net Liquidity"
+
+  delta_tgcr:
+    formula: "diff(TGCR)"
+    description: "Daily change in TGCR"
+
+  delta_fhlb:
+    formula: "diff(FHLB_ADVANCES)"
+    description: "Daily change in FHLB Advances"
+
+  delta_hy_oas:
+    formula: "diff(HY_OAS)"
+    description: "Daily change in HY OAS"
 
 # ==========================
 # Calendar & Event Flags
