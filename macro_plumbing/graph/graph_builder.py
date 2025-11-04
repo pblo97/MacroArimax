@@ -9,6 +9,9 @@ import networkx as nx
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 
+# Export public functions
+__all__ = ['LiquidityGraph', 'GraphNode', 'build_liquidity_graph', 'create_interactive_graph_plotly']
+
 
 @dataclass
 class GraphNode:
