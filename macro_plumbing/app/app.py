@@ -523,16 +523,19 @@ if run_analysis:
         - Rola hacia adelante para evitar look-ahead bias
         """)
 
-        # Configuration
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            train_window = st.selectbox("Ventana entrenamiento:", [126, 252, 504], index=1, help="Días de training")
-        with col2:
-            test_window = st.selectbox("Ventana test:", [21, 63, 126], index=1, help="Días de testing")
-        with col3:
-            step_size = st.selectbox("Step size:", [21, 63], index=0, help="Días entre folds")
+        # Configuration in form to prevent full page reload
+        with st.form("backtest_form"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                train_window = st.selectbox("Ventana entrenamiento:", [126, 252, 504], index=1, help="Días de training")
+            with col2:
+                test_window = st.selectbox("Ventana test:", [21, 63, 126], index=1, help="Días de testing")
+            with col3:
+                step_size = st.selectbox("Step size:", [21, 63], index=0, help="Días entre folds")
 
-        if st.button("🚀 Ejecutar Backtest"):
+            submit_backtest = st.form_submit_button("🚀 Ejecutar Backtest", use_container_width=True)
+
+        if submit_backtest:
             with st.spinner("Ejecutando walk-forward backtest..."):
                 try:
                     # Prepare target: stress events (e.g., VIX spikes, NFCI > threshold)
