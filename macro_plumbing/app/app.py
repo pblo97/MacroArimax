@@ -25,6 +25,9 @@ from macro_plumbing.models.anomalies import detect_anomalies
 from macro_plumbing.models.fusion import SignalFusion
 from macro_plumbing.graph.graph_builder import build_liquidity_graph
 from macro_plumbing.graph.visualization import create_interactive_graph_plotly
+from macro_plumbing.graph.graph_dynamics import GraphMarkovDynamics
+from macro_plumbing.graph.graph_contagion import StressContagion
+from macro_plumbing.graph.graph_analysis import LiquidityNetworkAnalysis
 
 
 # Page config
@@ -229,52 +232,243 @@ if run_analysis:
         st.plotly_chart(fig, use_container_width=True)
 
     # ==================
-    # Tab 3: Mapa de Drenajes
+    # Tab 3: Mapa de Drenajes (Advanced Graph Analysis)
     # ==================
     with tab3:
-        st.header("Grafo de Flujos de Liquidez")
+        st.header("🔗 Análisis Avanzado de Red de Liquidez")
 
         # Build graph
-        graph = build_liquidity_graph(df)
+        with st.spinner("Construyendo grafo de liquidez..."):
+            graph = build_liquidity_graph(df)
 
-        # Interactive graph visualization
-        st.subheader("Visualización Interactiva")
-        try:
-            fig_graph = create_interactive_graph_plotly(graph)
-            st.plotly_chart(fig_graph, use_container_width=True)
-        except Exception as e:
-            st.error(f"Error creando visualización: {e}")
-            st.info("💡 Mostrando vista de tablas como alternativa")
+        # Tabs within Tab 3
+        subtab1, subtab2, subtab3, subtab4 = st.tabs([
+            "📈 Visualización",
+            "🧬 Estados Markov",
+            "🦠 Contagio",
+            "⚠️ Análisis Sistémico"
+        ])
 
-        # Expandable detailed tables
-        with st.expander("📊 Ver Tablas Detalladas"):
-            nodes_df, edges_df = graph.to_dataframe()
+        # Subtab 1: Visualization
+        with subtab1:
+            st.subheader("Grafo Interactivo de Flujos")
+            try:
+                fig_graph = create_interactive_graph_plotly(graph)
+                st.plotly_chart(fig_graph, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creando visualización: {e}")
 
-            col1, col2 = st.columns(2)
-
+            # Basic insights
+            col1, col2, col3 = st.columns(3)
             with col1:
-                st.subheader("Nodos (Entidades)")
-                st.dataframe(nodes_df, use_container_width=True)
-
+                st.metric("Nodos", len(graph.G.nodes()))
             with col2:
-                st.subheader("Flujos (Drenajes/Inyecciones)")
-                st.dataframe(edges_df, use_container_width=True)
+                st.metric("Flujos", len(graph.G.edges()))
+            with col3:
+                total_flow = sum(abs(d.get('flow', 0)) for _, _, d in graph.G.edges(data=True))
+                st.metric("Flujo Total", f"${total_flow:.0f}B")
 
-        # Key insights
-        st.subheader("🎯 Insights Clave")
-        col1, col2 = st.columns(2)
+            # Expandable tables
+            with st.expander("📊 Ver Tablas Detalladas"):
+                nodes_df, edges_df = graph.to_dataframe()
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.dataframe(nodes_df, use_container_width=True)
+                with col2:
+                    st.dataframe(edges_df, use_container_width=True)
 
-        with col1:
-            st.markdown("**Top Drenajes (Sinks):**")
-            sinks = graph.get_sinks(top_n=3)
-            for sink in sinks:
-                st.markdown(f"- {sink}")
+        # Subtab 2: Markov Dynamics
+        with subtab2:
+            st.subheader("Estados Markov por Nodo")
+            st.markdown("""
+            Cada nodo tiene una **probabilidad de stress** que evoluciona basada en:
+            - 🔵 Señal propia (z-score, percentil, deltas)
+            - 🔴 Contagio de vecinos (weighted by flows)
+            - 🟣 Régimen global
+            """)
 
-        with col2:
-            st.markdown("**Top Fuentes (Sources):**")
-            sources = graph.get_sources(top_n=3)
-            for source in sources:
-                st.markdown(f"- {source}")
+            try:
+                # Initialize dynamics
+                dynamics = GraphMarkovDynamics(
+                    graph.G,
+                    transition_speed=0.3,
+                    contagion_weight=0.3
+                )
+
+                # Compute current stress state
+                global_stress = stress_score.iloc[-1] if len(stress_score) > 0 else 0.5
+                current_stress = dynamics.step(global_stress=global_stress)
+
+                # Display current state
+                st.subheader("Estado Actual de Stress por Nodo")
+                stress_df = pd.DataFrame([
+                    {
+                        'Nodo': node,
+                        'Prob. Stress': f"{prob:.1%}",
+                        'Estado': '🔴 STRESSED' if prob > 0.6 else '🟡 CAUTION' if prob > 0.4 else '🟢 CALM'
+                    }
+                    for node, prob in current_stress.items()
+                ])
+                st.dataframe(stress_df, use_container_width=True, hide_index=True)
+
+                # Simulate evolution
+                st.subheader("Simulación de Evolución (10 pasos)")
+                evolution = dynamics.simulate(
+                    n_steps=10,
+                    global_stress_series=np.linspace(global_stress, min(global_stress + 0.2, 1.0), 10)
+                )
+
+                # Plot evolution
+                fig_evolution = px.line(
+                    evolution,
+                    x='step',
+                    y=[col for col in evolution.columns if col != 'step'],
+                    title="Evolución de Probabilidad de Stress",
+                    labels={'value': 'Prob. Stress', 'variable': 'Nodo'}
+                )
+                st.plotly_chart(fig_evolution, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"Error en análisis Markov: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+
+        # Subtab 3: Contagion
+        with subtab3:
+            st.subheader("🦠 Modelo de Contagio via Random Walk")
+            st.markdown("""
+            Simula cómo el **stress se propaga** a través de la red.
+            - **1-step**: Contagio inmediato a vecinos
+            - **k-step**: Propagación multi-salto
+            - **Amplification**: Nodos que amplifican stress (superspreaders)
+            """)
+
+            try:
+                # Initialize contagion model
+                contagion = StressContagion(graph.G, damping=0.7)
+
+                # Get current stress
+                current_stress_dict = {
+                    node: dynamics.node_states[node].stress_prob
+                    for node in graph.G.nodes()
+                }
+
+                # Superspreaders
+                st.subheader("🎯 Nodos Superspreaders (Amplificadores)")
+                superspreaders = contagion.identify_superspreaders(top_k=min(3, len(graph.G.nodes())), steps=3)
+
+                superspreader_df = pd.DataFrame([
+                    {
+                        'Nodo': node,
+                        'Factor Amplificación': f"{amp:.2f}x",
+                        'Riesgo': '🔴 Alto' if amp > 1.2 else '🟡 Medio' if amp > 1.0 else '🟢 Bajo'
+                    }
+                    for node, amp in superspreaders
+                ])
+                st.dataframe(superspreader_df, use_container_width=True, hide_index=True)
+
+                # Shock simulation
+                st.subheader("💥 Simulación de Shock")
+                shock_node = st.selectbox("Selecciona nodo para shock:", list(graph.G.nodes()))
+
+                if st.button("Simular Shock"):
+                    shock_result = contagion.simulate_shock(
+                        shock_node=shock_node,
+                        shock_magnitude=1.0,
+                        steps=5
+                    )
+
+                    fig_shock = px.line(
+                        shock_result,
+                        x='step',
+                        y=[col for col in shock_result.columns if col != 'step'],
+                        title=f"Propagación de Shock desde {shock_node}",
+                        labels={'value': 'Stress', 'variable': 'Nodo'}
+                    )
+                    st.plotly_chart(fig_shock, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"Error en análisis de contagio: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+
+        # Subtab 4: Systemic Analysis
+        with subtab4:
+            st.subheader("⚠️ Análisis de Riesgo Sistémico")
+
+            try:
+                # Initialize analysis
+                analysis = LiquidityNetworkAnalysis(graph.G)
+
+                # Systemic importance
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.subheader("🏦 Nodos Sistémicamente Importantes")
+                    sifis = analysis.identify_systemically_important_nodes(top_k=min(3, len(graph.G.nodes())))
+                    sifi_df = pd.DataFrame([
+                        {
+                            'Nodo': node,
+                            'Importancia': f"{score:.1%}",
+                            'Nivel': '🔴 Crítico' if score > 0.7 else '🟡 Alto' if score > 0.4 else '🟢 Normal'
+                        }
+                        for node, score in sifis
+                    ])
+                    st.dataframe(sifi_df, use_container_width=True, hide_index=True)
+
+                with col2:
+                    st.subheader("🔗 Bottlenecks Críticos")
+                    critical_edges = analysis.find_all_critical_edges()[:3]
+                    if critical_edges:
+                        bottleneck_df = pd.DataFrame([
+                            {
+                                'Flujo': f"{u} → {v}",
+                                'Criticidad': f"{crit:.3f}",
+                                'Riesgo': '🔴 Alto' if crit > 0.1 else '🟡 Medio'
+                            }
+                            for (u, v), crit in critical_edges
+                        ])
+                        st.dataframe(bottleneck_df, use_container_width=True, hide_index=True)
+
+                # Network fragility
+                st.subheader("🛡️ Fragilidad de la Red")
+                fragility = analysis.compute_network_fragility()
+
+                frag_col1, frag_col2, frag_col3 = st.columns(3)
+                with frag_col1:
+                    st.metric(
+                        "Densidad",
+                        f"{fragility['density']:.1%}",
+                        help="Qué tan conectada está la red"
+                    )
+                with frag_col2:
+                    st.metric(
+                        "Componentes",
+                        f"{fragility['n_components']:.0f}",
+                        help="Número de subgrafos desconectados"
+                    )
+                with frag_col3:
+                    fragility_score = fragility['fragility_score']
+                    st.metric(
+                        "Score Fragilidad",
+                        f"{fragility_score:.1%}",
+                        delta=None,
+                        help="0=robusto, 1=frágil"
+                    )
+
+                # Centrality metrics
+                with st.expander("📊 Métricas de Centralidad Completas"):
+                    centrality_df = analysis.compute_centrality_metrics()
+                    st.dataframe(
+                        centrality_df[['node', 'pagerank', 'betweenness', 'closeness', 'weighted_in', 'weighted_out']],
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+            except Exception as e:
+                st.error(f"Error en análisis sistémico: {e}")
+                import traceback
+                st.code(traceback.format_exc())
 
     # ==================
     # Tab 4: Backtest
