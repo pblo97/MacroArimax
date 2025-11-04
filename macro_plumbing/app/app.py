@@ -28,6 +28,8 @@ from macro_plumbing.graph.visualization import create_interactive_graph_plotly
 from macro_plumbing.graph.graph_dynamics import GraphMarkovDynamics
 from macro_plumbing.graph.graph_contagion import StressContagion
 from macro_plumbing.graph.graph_analysis import LiquidityNetworkAnalysis
+from macro_plumbing.backtest.walkforward import WalkForwardValidator
+from macro_plumbing.backtest.metrics import compute_all_metrics
 
 
 # Page config
@@ -510,19 +512,172 @@ if run_analysis:
                 st.code(traceback.format_exc())
 
     # ==================
-    # Tab 4: Backtest
+    # Tab 4: Backtest Walk-Forward
     # ==================
     with tab4:
-        st.header("Backtest & Performance Metrics")
+        st.header("📊 Backtest Walk-Forward")
+        st.markdown("""
+        Validación robusta del modelo usando **walk-forward cross-validation**.
+        - Entrena en ventana histórica
+        - Predice en ventana futura (out-of-sample)
+        - Rola hacia adelante para evitar look-ahead bias
+        """)
 
-        st.info("🔧 Backtest walk-forward en desarrollo. Métricas disponibles:")
+        # Configuration
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            train_window = st.selectbox("Ventana entrenamiento:", [126, 252, 504], index=1, help="Días de training")
+        with col2:
+            test_window = st.selectbox("Ventana test:", [21, 63, 126], index=1, help="Días de testing")
+        with col3:
+            step_size = st.selectbox("Step size:", [21, 63], index=0, help="Días entre folds")
 
-        # Placeholder metrics
-        metrics_data = {
-            "Metric": ["IC (Spearman)", "AUROC", "Hit Rate", "Sharpe Overlay"],
-            "Value": [0.15, 0.68, 0.62, 1.35],
-        }
-        st.table(pd.DataFrame(metrics_data))
+        if st.button("🚀 Ejecutar Backtest"):
+            with st.spinner("Ejecutando walk-forward backtest..."):
+                try:
+                    # Prepare target: stress events (e.g., VIX spikes, NFCI > threshold)
+                    # For simplicity, use stress_score > threshold as "ground truth"
+                    target = (stress_score > stress_threshold).astype(int)
+                    target.name = "stress_event"
+
+                    # Prepare features
+                    features = signals[["factor_z", "cusum", "anomaly", "nl_stress"]].copy()
+
+                    # Create validator
+                    validator = WalkForwardValidator(
+                        train_window=train_window,
+                        test_window=test_window,
+                        step=step_size
+                    )
+
+                    # Model function: simple weighted average (can be replaced with ML model)
+                    def train_model(X_train, y_train):
+                        """Simple fusion model for demo."""
+                        class SimpleModel:
+                            def __init__(self, weights):
+                                self.weights = weights
+
+                            def predict(self, X):
+                                pred = sum(X[col] * self.weights[col] for col in self.weights if col in X.columns)
+                                return pred
+
+                        # Use predefined weights or optimize on train set
+                        return SimpleModel(weights)
+
+                    # Run walk-forward
+                    results = validator.validate(features, target, train_model)
+
+                    if len(results) == 0:
+                        st.warning("No hay suficientes datos para backtest. Necesita al menos train_window + test_window días.")
+                    else:
+                        # Display results
+                        st.success(f"✅ Backtest completado: {len(results)} folds")
+
+                        # Aggregate metrics
+                        st.subheader("📈 Métricas Agregadas")
+                        metric_cols = ['IC', 'AUROC', 'Brier', 'HitRate']
+                        agg_metrics = results[metric_cols].describe()
+
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            ic_mean = results['IC'].mean()
+                            ic_std = results['IC'].std()
+                            st.metric("IC (mean)", f"{ic_mean:.3f}", f"±{ic_std:.3f}")
+                        with col2:
+                            auroc_mean = results['AUROC'].mean()
+                            st.metric("AUROC (mean)", f"{auroc_mean:.3f}")
+                        with col3:
+                            hit_mean = results['HitRate'].mean()
+                            st.metric("Hit Rate (mean)", f"{hit_mean:.1%}")
+                        with col4:
+                            brier_mean = results['Brier'].mean()
+                            st.metric("Brier (mean)", f"{brier_mean:.3f}", help="Lower is better")
+
+                        # Time series of metrics
+                        st.subheader("📉 Evolución Temporal de Métricas")
+
+                        fig_metrics = go.Figure()
+                        for metric in ['IC', 'AUROC', 'HitRate']:
+                            if metric in results.columns:
+                                fig_metrics.add_trace(go.Scatter(
+                                    x=results['test_start'],
+                                    y=results[metric],
+                                    mode='lines+markers',
+                                    name=metric
+                                ))
+
+                        fig_metrics.update_layout(
+                            title="Métricas por Fold (Out-of-Sample)",
+                            xaxis_title="Test Start Date",
+                            yaxis_title="Metric Value",
+                            hovermode='x unified'
+                        )
+                        st.plotly_chart(fig_metrics, use_container_width=True)
+
+                        # Results table
+                        st.subheader("📋 Resultados Detallados por Fold")
+                        display_cols = ['fold', 'train_start', 'train_end', 'test_start', 'test_end',
+                                       'IC', 'AUROC', 'Brier', 'HitRate']
+                        display_results = results[display_cols].copy()
+                        display_results['train_start'] = pd.to_datetime(display_results['train_start']).dt.date
+                        display_results['train_end'] = pd.to_datetime(display_results['train_end']).dt.date
+                        display_results['test_start'] = pd.to_datetime(display_results['test_start']).dt.date
+                        display_results['test_end'] = pd.to_datetime(display_results['test_end']).dt.date
+
+                        st.dataframe(
+                            display_results.style.format({
+                                'IC': '{:.3f}',
+                                'AUROC': '{:.3f}',
+                                'Brier': '{:.3f}',
+                                'HitRate': '{:.1%}'
+                            }),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                        # Statistical significance
+                        st.subheader("📊 Análisis Estadístico")
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            # t-test: is IC significantly > 0?
+                            from scipy import stats as sp_stats
+                            ic_values = results['IC'].dropna()
+                            if len(ic_values) > 2:
+                                t_stat, p_value = sp_stats.ttest_1samp(ic_values, 0)
+                                sig = "✅ Significativo" if p_value < 0.05 else "❌ No significativo"
+                                st.metric(
+                                    "IC > 0 (t-test)",
+                                    sig,
+                                    f"p-value: {p_value:.4f}"
+                                )
+
+                        with col2:
+                            # Consistency: % of folds with IC > 0
+                            consistency = (results['IC'] > 0).mean()
+                            st.metric(
+                                "Consistencia IC > 0",
+                                f"{consistency:.1%}",
+                                f"{int(consistency * len(results))}/{len(results)} folds"
+                            )
+
+                        # Distribution of IC
+                        st.subheader("📊 Distribución de IC")
+                        fig_hist = px.histogram(
+                            results,
+                            x='IC',
+                            nbins=20,
+                            title="Distribución de Information Coefficient",
+                            labels={'IC': 'Information Coefficient'},
+                            marginal='box'
+                        )
+                        fig_hist.add_vline(x=0, line_dash="dash", line_color="red", annotation_text="IC=0")
+                        st.plotly_chart(fig_hist, use_container_width=True)
+
+                except Exception as e:
+                    st.error(f"Error en backtest: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
 
     # ==================
     # Tab 5: Explicabilidad

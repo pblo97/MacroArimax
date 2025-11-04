@@ -5,7 +5,7 @@ Performance metrics for liquidity stress models: IC, AUROC, Brier, Q4-Q1, etc.
 
 import numpy as np
 import pandas as pd
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Optional
 from scipy import stats
 from sklearn.metrics import roc_auc_score, brier_score_loss
 
