@@ -5,7 +5,7 @@ Signal fusion with Bayesian Model Averaging and calibration.
 
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from scipy.special import expit  # Logistic sigmoid
