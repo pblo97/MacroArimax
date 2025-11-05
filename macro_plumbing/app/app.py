@@ -23,7 +23,7 @@ from macro_plumbing.models.cusum_ewma import CUSUM, EWMA
 from macro_plumbing.models.changepoints import detect_changepoints
 from macro_plumbing.models.anomalies import detect_anomalies
 from macro_plumbing.models.fusion import SignalFusion
-from macro_plumbing.graph.graph_builder import build_liquidity_graph
+from macro_plumbing.graph.graph_builder_full import build_complete_liquidity_graph, detect_quarter_end
 from macro_plumbing.graph.visualization import create_interactive_graph_plotly
 from macro_plumbing.graph.graph_dynamics import GraphMarkovDynamics
 from macro_plumbing.graph.graph_contagion import StressContagion
@@ -267,7 +267,7 @@ if st.session_state.get('run_analysis', False):
 
         # Build graph
         with st.spinner("Construyendo grafo de liquidez..."):
-            graph = build_liquidity_graph(df)
+            graph = build_complete_liquidity_graph(df, quarter_end_relax=True)
 
         # Tabs within Tab 3
         subtab1, subtab2, subtab3, subtab4 = st.tabs([
@@ -295,6 +295,39 @@ if st.session_state.get('run_analysis', False):
             with col3:
                 total_flow = sum(abs(d.get('flow', 0)) for _, _, d in graph.G.edges(data=True))
                 st.metric("Flujo Total", f"${total_flow:.0f}B")
+
+            # New Advanced Metrics
+            st.divider()
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("🔥 Stress Flow Index", f"{graph.stress_flow_index:.2f}")
+            with col2:
+                st.metric("⚠️ Hotspots Detectados", len(graph.hotspots))
+            with col3:
+                qe_series = detect_quarter_end(df.index)
+                is_qe = qe_series.iloc[-1] if len(qe_series) > 0 else False
+                st.metric("📅 Quarter-End", "Sí" if is_qe else "No")
+            with col4:
+                if hasattr(graph, 'reserve_identity') and len(graph.reserve_identity) > 0:
+                    residual = graph.reserve_identity['residual'].iloc[-1]
+                    st.metric("💰 Residual Reservas", f"${residual:.0f}B")
+                else:
+                    st.metric("💰 Residual Reservas", "N/A")
+
+            # Reserve Identity Validation
+            if hasattr(graph, 'reserve_identity') and len(graph.reserve_identity) > 0:
+                with st.expander("🔍 Reserve Identity Validation (ΔReserves ≈ -ΔTGA - ΔONRRP)"):
+                    st.dataframe(graph.reserve_identity.tail(10), use_container_width=True)
+
+            # Hotspots Details
+            if graph.hotspots and len(graph.hotspots) > 0:
+                with st.expander("🔥 Hotspots Detectados (|z| > 1.5 & draining)"):
+                    for source, target in graph.hotspots:
+                        edge_data = graph.G.edges[source, target]
+                        driver = edge_data.get('driver', 'N/A')
+                        z_score = edge_data.get('z_score', 0)
+                        flow = edge_data.get('flow', 0)
+                        st.warning(f"**{source} → {target}** | Driver: {driver} | Z-score: {z_score:.2f} | Flow: ${flow:.0f}B")
 
             # Expandable tables
             with st.expander("📊 Ver Tablas Detalladas"):
