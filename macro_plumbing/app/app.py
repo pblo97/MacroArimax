@@ -28,8 +28,17 @@ from macro_plumbing.graph.visualization import create_interactive_graph_plotly
 from macro_plumbing.graph.graph_dynamics import GraphMarkovDynamics
 from macro_plumbing.graph.graph_contagion import StressContagion
 from macro_plumbing.graph.graph_analysis import LiquidityNetworkAnalysis
+from macro_plumbing.graph.edges_normalization import (
+    compute_robust_sfi, add_edge_family_attributes, get_family_summary_table, visualize_edge_units
+)
 from macro_plumbing.backtest.walkforward import WalkForwardValidator
 from macro_plumbing.backtest.metrics import compute_all_metrics
+from macro_plumbing.metrics.lead_lag_and_dm import (
+    compute_lead_lag_matrix, compute_lead_lag_heatmap, rolling_diebold_mariano, compute_granger_causality
+)
+from macro_plumbing.risk.position_overlay import (
+    generate_playbook, create_pre_close_checklist, compute_rolling_beta_path
+)
 
 
 # Page config
@@ -259,6 +268,106 @@ if st.session_state.get('run_analysis', False):
         fig = px.line(nl_plot, title="Componentes de Net Liquidity (último año)")
         st.plotly_chart(fig, use_container_width=True)
 
+        # Historical Stress Contributions (Stacked Bar)
+        st.divider()
+        st.subheader("📊 Historical Stress Contributions (6 months)")
+
+        # Compute contributions over time
+        lookback = min(126, len(signals))  # 6 months or available
+        signals_recent = signals.iloc[-lookback:]
+
+        contrib_history = pd.DataFrame()
+        for col in weights.keys():
+            if col in signals_recent.columns:
+                contrib_history[col] = signals_recent[col] * weights[col]
+
+        # Create stacked bar chart
+        fig_stacked = go.Figure()
+        for col in contrib_history.columns:
+            fig_stacked.add_trace(go.Bar(
+                x=contrib_history.index,
+                y=contrib_history[col],
+                name=col,
+                hovertemplate='%{y:.3f}<extra></extra>'
+            ))
+
+        fig_stacked.update_layout(
+            barmode='stack',
+            title="Stress Score Contributions Over Time",
+            xaxis_title="Date",
+            yaxis_title="Contribution",
+            hovermode="x unified",
+            height=400
+        )
+        st.plotly_chart(fig_stacked, use_container_width=True)
+
+        # Lead-Lag Analysis
+        st.divider()
+        st.subheader("🔍 Lead-Lag Analysis: Signal → Target")
+
+        with st.expander("📈 Lead-Lag Heatmap (Spearman Correlations)"):
+            try:
+                # Prepare signals for lead-lag
+                signals_for_ll = pd.DataFrame({
+                    'Stress_Score': stress_score,
+                    'Factor_Z': factor_z,
+                    'CUSUM': cusum_alarm,
+                    'NL_Stress': nl_stress
+                })
+
+                # Prepare targets (need to compute from df)
+                targets_for_ll = pd.DataFrame(index=df.index)
+
+                # Compute target deltas if available
+                if 'HY_OAS' in df.columns:
+                    targets_for_ll['ΔHY_OAS'] = df['HY_OAS'].diff()
+                if 'SP500' in df.columns:
+                    # Compute excess returns (assuming risk-free ~ 0 for simplicity)
+                    targets_for_ll['SPX_ER'] = df['SP500'].pct_change()
+                if 'VIX' in df.columns:
+                    targets_for_ll['ΔVIX'] = df['VIX'].diff()
+
+                if len(targets_for_ll.columns) > 0:
+                    # Compute lead-lag matrix
+                    ll_matrix = compute_lead_lag_matrix(
+                        signals_for_ll.dropna(),
+                        targets_for_ll.dropna(),
+                        max_lag=10,
+                        method='spearman'
+                    )
+
+                    # Display summary table
+                    st.dataframe(
+                        ll_matrix[['Signal', 'Target', 'Best_Lag', 'Best_Corr', 'P_Value']],
+                        use_container_width=True
+                    )
+
+                    # Compute full heatmaps
+                    heatmaps = compute_lead_lag_heatmap(
+                        signals_for_ll.dropna(),
+                        targets_for_ll.dropna(),
+                        max_lag=10,
+                        method='spearman'
+                    )
+
+                    # Plot heatmap for each target
+                    for target_name, heatmap_df in heatmaps.items():
+                        fig_heatmap = px.imshow(
+                            heatmap_df,
+                            labels=dict(x="Lag (days)", y="Signal", color="Correlation"),
+                            title=f"Lead-Lag Heatmap: Signals → {target_name}",
+                            color_continuous_scale="RdBu_r",
+                            aspect="auto",
+                            zmin=-1,
+                            zmax=1
+                        )
+                        st.plotly_chart(fig_heatmap, use_container_width=True)
+                else:
+                    st.info("Targets (HY_OAS, SP500, VIX) not available in data for lead-lag analysis")
+
+            except Exception as e:
+                st.warning(f"Lead-lag analysis failed: {e}")
+
     # ==================
     # Tab 3: Mapa de Drenajes (Advanced Graph Analysis)
     # ==================
@@ -328,6 +437,121 @@ if st.session_state.get('run_analysis', False):
                         z_score = edge_data.get('z_score', 0)
                         flow = edge_data.get('flow', 0)
                         st.warning(f"**{source} → {target}** | Driver: {driver} | Z-score: {z_score:.2f} | Flow: ${flow:.0f}B")
+
+            # Playbooks & Position Overlay
+            st.divider()
+            st.subheader("📋 Playbook Automático")
+
+            try:
+                # Get quarter-end status
+                qe_series = detect_quarter_end(df.index)
+                is_qe = qe_series.iloc[-1] if len(qe_series) > 0 else False
+
+                # Generate playbook
+                graph_edges = {(u, v): d for u, v, d in graph.G.edges(data=True)}
+                playbook = generate_playbook(
+                    hotspots=graph.hotspots,
+                    graph_edges=graph_edges,
+                    stress_flow_index=graph.stress_flow_index,
+                    quarter_end=is_qe
+                )
+
+                # Display playbook
+                col1, col2 = st.columns([2, 1])
+
+                with col1:
+                    st.markdown(f"### {playbook.reason}")
+                    st.markdown(f"**Confianza:** {playbook.confidence:.0%}")
+
+                    if playbook.action_items:
+                        st.markdown("**Action Items:**")
+                        for item in playbook.action_items:
+                            st.markdown(f"- {item}")
+
+                with col2:
+                    st.metric("🎯 Target Beta", f"{playbook.target_beta:.1%}")
+
+                    if playbook.hedge_instruments:
+                        st.markdown("**🛡️ Hedge con:**")
+                        for inst in playbook.hedge_instruments:
+                            st.markdown(f"- {inst}")
+
+                    if playbook.avoid_instruments:
+                        st.markdown("**⛔ Evitar:**")
+                        for inst in playbook.avoid_instruments:
+                            st.markdown(f"- {inst}")
+
+                # Pre-close checklist
+                st.divider()
+                checklist = create_pre_close_checklist(
+                    graph=graph,
+                    stress_score=stress_score.iloc[-1],
+                    sfi_z=(graph.stress_flow_index - 0) / 1.0,  # Simple normalization
+                    quarter_end=is_qe
+                )
+
+                st.markdown("### ✅ Pre-Close Checklist")
+
+                check_cols = st.columns(5)
+                with check_cols[0]:
+                    if checklist['reserve_residual_ok']:
+                        st.success("✅ Reserve Identity OK")
+                    else:
+                        st.error("❌ Reserve Mismatch")
+
+                with check_cols[1]:
+                    if checklist['quarter_end_flag']:
+                        st.warning("⏰ Quarter-End")
+                    else:
+                        st.info("📅 Normal Period")
+
+                with check_cols[2]:
+                    if checklist['hotspots_present']:
+                        st.warning("🔥 Hotspots Present")
+                    else:
+                        st.success("✅ No Hotspots")
+
+                with check_cols[3]:
+                    if checklist['global_regime_tense']:
+                        st.error("📈 Regime Tense")
+                    else:
+                        st.success("✅ Regime Calm")
+
+                with check_cols[4]:
+                    if checklist['mode'] == 'DEFENSE':
+                        st.error("🛡️ MODE: DEFENSE")
+                    else:
+                        st.success("✅ MODE: NORMAL")
+
+            except Exception as e:
+                st.warning(f"Playbook generation failed: {e}")
+
+            # Edge Families Analysis
+            st.divider()
+            with st.expander("📊 Edge Families (Stock vs Spread)"):
+                try:
+                    # Add family attributes
+                    graph_with_families = add_edge_family_attributes(graph.G)
+
+                    # Get family summary
+                    family_summary = get_family_summary_table(graph_with_families)
+                    st.dataframe(family_summary, use_container_width=True)
+
+                    # Visualize edge units
+                    edge_units_table = visualize_edge_units(graph_with_families)
+                    st.dataframe(edge_units_table, use_container_width=True)
+
+                    # Compute robust SFI
+                    robust_sfi, sfi_breakdown = compute_robust_sfi(graph_with_families, method='family_normalized')
+                    st.metric("🔥 Robust SFI (Family-Normalized)", f"{robust_sfi:.2f}")
+
+                    if sfi_breakdown:
+                        st.markdown("**SFI by Family:**")
+                        for family, value in sfi_breakdown.items():
+                            st.markdown(f"- {family}: {value:.2f}")
+
+                except Exception as e:
+                    st.warning(f"Edge family analysis failed: {e}")
 
             # Expandable tables
             with st.expander("📊 Ver Tablas Detalladas"):
@@ -536,14 +760,66 @@ if st.session_state.get('run_analysis', False):
                         help="0=robusto, 1=frágil"
                     )
 
-                # Centrality metrics
+                # Centrality metrics with trends
                 with st.expander("📊 Métricas de Centralidad Completas"):
                     centrality_df = analysis.compute_centrality_metrics()
+
+                    # Add trend indicators if we have time-series data
+                    # For now, show current metrics
+                    display_cols = ['node', 'pagerank', 'betweenness', 'closeness', 'weighted_in', 'weighted_out']
+
                     st.dataframe(
-                        centrality_df[['node', 'pagerank', 'betweenness', 'closeness', 'weighted_in', 'weighted_out']],
+                        centrality_df[display_cols],
                         use_container_width=True,
                         hide_index=True
                     )
+
+                # PageRank Trends
+                st.divider()
+                st.subheader("📈 PageRank Trends (20-day)")
+
+                try:
+                    # Compute PageRank for last 20 days if we have historical graph data
+                    # Since we don't store historical graphs, we'll compute current + delta approximation
+                    # using edge weights and z-scores
+
+                    import networkx as nx
+
+                    # Current PageRank
+                    current_pr = nx.pagerank(graph.G, weight='weight')
+
+                    # Display with trend indicators (approximated from z-scores)
+                    pr_trend_data = []
+                    for node, pr_value in current_pr.items():
+                        # Get node data
+                        node_data = graph.G.nodes[node]
+                        node_z = node_data.get('z_score', 0)
+
+                        # Approximate trend: negative z-score -> deteriorating (↓), positive -> improving (↑)
+                        if node_z > 0.5:
+                            trend = "↑"
+                            trend_color = "🟢"
+                        elif node_z < -0.5:
+                            trend = "↓"
+                            trend_color = "🔴"
+                        else:
+                            trend = "→"
+                            trend_color = "🟡"
+
+                        pr_trend_data.append({
+                            'Node': node,
+                            'PageRank': f"{pr_value:.3f}",
+                            'Trend_20d': f"{trend_color} {trend}",
+                            'Z_Score': f"{node_z:.2f}"
+                        })
+
+                    pr_trend_df = pd.DataFrame(pr_trend_data).sort_values('PageRank', ascending=False)
+                    st.dataframe(pr_trend_df, use_container_width=True, hide_index=True)
+
+                    st.caption("Nota: Trend basado en z-score del nodo. ↑ = mejorando liquidez, ↓ = deteriorando, → = estable")
+
+                except Exception as e:
+                    st.warning(f"PageRank trends failed: {e}")
 
             except Exception as e:
                 st.error(f"Error en análisis sistémico: {e}")
