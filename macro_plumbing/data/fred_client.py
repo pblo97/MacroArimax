@@ -333,9 +333,11 @@ class FREDClient:
         if "CONTINUED_CLAIMS" in df.columns:
             df["continued_claims_zscore"] = zscore_rolling(df["CONTINUED_CLAIMS"], window=52)
 
-        if all(col in df.columns for col in ["UNEMPLOYMENT_RATE", "PART_TIME_ECONOMIC", "LABOR_PARTICIPATION"]):
-            # U-6 style underemployment proxy
-            df["labor_slack"] = df["UNEMPLOYMENT_RATE"] + (df["PART_TIME_ECONOMIC"] / df["LABOR_PARTICIPATION"] * 100)
+        # REMOVED: labor_slack formula was incorrect
+        # Mixed incompatible units (level vs rate)
+        # Use U6RATE series directly from FRED instead
+        # if all(col in df.columns for col in ["UNEMPLOYMENT_RATE", "PART_TIME_ECONOMIC", "LABOR_PARTICIPATION"]):
+        #     df["labor_slack"] = df["UNEMPLOYMENT_RATE"] + (df["PART_TIME_ECONOMIC"] / df["LABOR_PARTICIPATION"] * 100)
 
         # === TIER 3: HOUSING MARKET ===
         if "MORTGAGE_30Y" in df.columns and "DGS10" in df.columns:
