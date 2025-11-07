@@ -106,18 +106,63 @@ if st.session_state.get('run_analysis', False):
     with tab1:
         st.header("Estado Actual del Sistema de Liquidez")
 
-        with st.spinner("Fetching data from FRED..."):
+        with st.spinner("Fetching data (FRED + Phase 2 Scrapers)..."):
             try:
-                # Fetch data
-                client = FREDClient(api_key=fred_api_key)
-                df_raw = client.fetch_all(start_date=start_date)
-                df = client.compute_derived_features(df_raw)
+                # Fetch ALL data sources (FRED + scraped Phase 2 data)
+                from macro_plumbing.data.master_scraper import quick_fetch
 
-                st.success(f"✅ Data loaded: {len(df)} observations")
+                df = quick_fetch(
+                    fred_api_key=fred_api_key,
+                    use_cache=True,
+                    parallel=True
+                )
+
+                # Filter by start_date if needed
+                if start_date and df is not None:
+                    df = df[df.index >= pd.to_datetime(start_date)]
+
+                # Check Phase 2 data availability
+                phase2_cols = [
+                    'dealer_leverage', 'eur_usd_3m_basis', 'mmf_net_flows',
+                    'vrp', 'convenience_yield', 'sofr_p75', 'effr_p75'
+                ]
+                available_phase2 = [col for col in phase2_cols if col in df.columns]
+
+                # Success message with Phase 2 indicator
+                success_msg = f"✅ Data loaded: {len(df)} observations, {len(df.columns)} series"
+                if available_phase2:
+                    success_msg += f"\n🎉 Phase 2 Active: {len(available_phase2)}/{len(phase2_cols)} new data sources"
+                st.success(success_msg)
+
+                # Show Phase 2 data in expander
+                if available_phase2:
+                    with st.expander("📊 Phase 2 Data Sources (NEW)", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write("**Available:**")
+                            for col in available_phase2:
+                                latest_val = df[col].dropna().iloc[-1] if not df[col].dropna().empty else None
+                                if latest_val is not None:
+                                    st.write(f"✅ {col}: {latest_val:.2f}")
+                        with col2:
+                            st.write("**Sources:**")
+                            st.write("• FRBNY (Dealer Leverage, Repo)")
+                            st.write("• ECB (FX Basis)")
+                            st.write("• ICI (MMF Flows)")
+                            st.write("• Calculated (VRP, Conv. Yield)")
 
             except Exception as e:
                 st.error(f"Error fetching data: {e}")
-                st.stop()
+                st.warning("Falling back to FRED-only data...")
+                try:
+                    # Fallback to FRED-only
+                    client = FREDClient(api_key=fred_api_key)
+                    df_raw = client.fetch_all(start_date=start_date)
+                    df = client.compute_derived_features(df_raw)
+                    st.info(f"✅ FRED data loaded: {len(df)} observations (Phase 2 unavailable)")
+                except Exception as e2:
+                    st.error(f"Fallback also failed: {e2}")
+                    st.stop()
 
         # Compute Net Liquidity
         nl_df = compute_net_liquidity_components(df)
