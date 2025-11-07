@@ -1117,11 +1117,13 @@ if st.session_state.get('run_analysis', False):
         st.markdown("""
         Predicts probability of liquidity crisis in next **5 days** using Random Forest classifier.
 
-        **Crisis Definition:**
-        - VIX > 35 OR
-        - CP spread > 150bp OR
-        - HY OAS > 700bp OR
-        - Discount Window > $10B
+        **Crisis Definition (CALIBRATED to P95):**
+        - VIX > 30.47 OR
+        - CP spread > 0.44% OR
+        - HY OAS > 6.72% OR
+        - Discount Window > $3.94M
+
+        *(Thresholds calibrated to 95th percentile of historical data - see Calibración expander)*
         """)
 
         try:
@@ -1320,11 +1322,12 @@ if st.session_state.get('run_analysis', False):
                     """)
 
                     # Analyze each crisis indicator
+                    # Showing OLD thresholds vs CALIBRATED thresholds
                     indicators_config = {
-                        'VIX': {'threshold': 35, 'unit': 'index'},
-                        'cp_tbill_spread': {'threshold': 150, 'unit': 'bps'},
-                        'HY_OAS': {'threshold': 700, 'unit': 'bps'},
-                        'DISCOUNT_WINDOW': {'threshold': 10000, 'unit': 'M$'}
+                        'VIX': {'old_threshold': 35, 'new_threshold': 30.47, 'unit': 'index'},
+                        'cp_tbill_spread': {'old_threshold': 150, 'new_threshold': 0.44, 'unit': '% (was bps)'},
+                        'HY_OAS': {'old_threshold': 700, 'new_threshold': 6.72, 'unit': '% (was bps)'},
+                        'DISCOUNT_WINDOW': {'old_threshold': 10000, 'new_threshold': 3944055, 'unit': 'M$'}
                     }
 
                     calibration_results = []
@@ -1337,9 +1340,16 @@ if st.session_state.get('run_analysis', False):
                         if len(series) == 0:
                             continue
 
-                        threshold = config['threshold']
-                        days_above = (series > threshold).sum()
-                        pct_above = (days_above / len(series)) * 100
+                        old_threshold = config['old_threshold']
+                        new_threshold = config['new_threshold']
+
+                        # Check with OLD threshold (for comparison)
+                        days_above_old = (series > old_threshold).sum()
+                        pct_above_old = (days_above_old / len(series)) * 100
+
+                        # Check with NEW threshold (calibrated)
+                        days_above_new = (series > new_threshold).sum()
+                        pct_above_new = (days_above_new / len(series)) * 100
 
                         # Calculate percentiles
                         p50 = series.quantile(0.50)
@@ -1350,28 +1360,29 @@ if st.session_state.get('run_analysis', False):
 
                         current_val = series.iloc[-1]
 
-                        # Determine status
-                        if pct_above > 50:
+                        # Determine status based on NEW threshold
+                        if pct_above_new > 50:
                             status = "🔴 CRÍTICO"
-                            issue = f"{pct_above:.1f}% de días exceden umbral - marca mayoría como crisis!"
-                        elif pct_above > 20:
+                            issue = f"{pct_above_new:.1f}% de días exceden nuevo umbral"
+                        elif pct_above_new > 20:
                             status = "🟡 ADVERTENCIA"
-                            issue = f"{pct_above:.1f}% de días exceden umbral - demasiado alto"
-                        elif pct_above > 10:
+                            issue = f"{pct_above_new:.1f}% de días exceden nuevo umbral"
+                        elif pct_above_new > 10:
                             status = "🟢 OK (alto)"
-                            issue = f"{pct_above:.1f}% esperado para estrés"
+                            issue = f"{pct_above_new:.1f}% esperado para estrés"
                         else:
                             status = "✅ BUENO"
-                            issue = f"{pct_above:.1f}% representa eventos raros"
+                            issue = f"{pct_above_new:.1f}% representa eventos raros"
 
                         calibration_results.append({
                             'Indicador': indicator,
-                            'Umbral Actual': f"{threshold:,.0f} {config['unit']}",
+                            'Umbral Viejo': f"{old_threshold:,.0f}",
+                            'Umbral Nuevo (P95)': f"{new_threshold:,.2f}",
                             'Valor Actual': f"{current_val:,.2f}",
-                            '% Días > Umbral': f"{pct_above:.1f}%",
-                            'P95 (sugerido)': f"{p95:,.2f}",
+                            '% Días > Viejo': f"{pct_above_old:.1f}%",
+                            '% Días > Nuevo': f"{pct_above_new:.1f}%",
                             'Status': status,
-                            'Diagnóstico': issue
+                            'Unidad': config['unit']
                         })
 
                     if calibration_results:
@@ -1383,31 +1394,38 @@ if st.session_state.get('run_analysis', False):
 
                         st.markdown("""
                         **Interpretación:**
-                        - **% Días > Umbral**: Si es >20%, el umbral está muy bajo
-                        - **P95 (percentil 95)**: Umbral sugerido que marca ~5% de días como crisis
+                        - **Umbral Viejo**: Umbral original que causaba 99.9% falsos positivos
+                        - **Umbral Nuevo (P95)**: Umbral calibrado (percentil 95) - ya implementado en el modelo
+                        - **% Días > Viejo**: Porcentaje de días que excedían umbral viejo (100% = problema crítico)
+                        - **% Días > Nuevo**: Porcentaje de días que exceden umbral nuevo (~5% = correcto)
                         - **Status**:
                           - ✅ BUENO: <10% días exceden (eventos raros)
                           - 🟢 OK: 10-20% (estrés moderado)
                           - 🟡 ADVERTENCIA: 20-50% (umbral bajo)
                           - 🔴 CRÍTICO: >50% (umbral muy bajo, marca mayoría como crisis)
 
-                        **Umbrales Sugeridos (P95):**
+                        **Umbrales ACTUALES en el modelo (ya calibrados):**
                         """)
 
-                        # Generate calibrated code
-                        suggested_code = "crisis_conditions = (\n"
+                        # Generate calibrated code (already implemented)
+                        suggested_code = "# ESTOS UMBRALES YA ESTÁN IMPLEMENTADOS\ncrisis_conditions = (\n"
                         for result in calibration_results:
                             indicator = result['Indicador']
-                            p95_str = result['P95 (sugerido)']
-                            p95_val = float(p95_str.replace(',', ''))
-                            suggested_code += f"    (df['{indicator}'] > {p95_val:.2f}) |\n"
+                            new_threshold_str = result['Umbral Nuevo (P95)']
+                            new_threshold_val = float(new_threshold_str.replace(',', ''))
+                            suggested_code += f"    (df['{indicator}'] > {new_threshold_val:.2f}) |\n"
                         suggested_code = suggested_code.rstrip(' |\n') + "\n)"
 
                         st.code(suggested_code, language='python')
 
-                        st.info("""
-                        💡 **Recomendación**: Si ves 🔴 CRÍTICO o 🟡 ADVERTENCIA, actualiza los umbrales
-                        en `crisis_classifier.py` usando los valores P95 sugeridos arriba.
+                        st.success("""
+                        ✅ **Umbrales Calibrados**: Los umbrales ya están actualizados en `crisis_classifier.py`
+                        basándose en el percentil 95 (P95) de datos históricos.
+
+                        Si ves status ✅ BUENO en todos los indicadores, el modelo debe predecir ~5-20% de
+                        probabilidad de crisis en condiciones normales (no 99%).
+
+                        **Recarga la página o presiona "🔄 Retrain Model" para aplicar los nuevos umbrales.**
                         """)
 
                         # === ADVANCED STATISTICAL ANALYSIS ===

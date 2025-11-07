@@ -89,10 +89,13 @@ class CrisisPredictor:
         Create binary crisis labels.
 
         Crisis definition (ANY of):
-        - VIX > 35 (panic)
-        - CP spread > 150bp (money market stress)
-        - HY OAS > 700bp (credit market stress)
-        - Discount Window > $10B (Fed emergency lending active)
+        - VIX > 30.47 (panic - 95th percentile)
+        - CP spread > 0.44% (money market stress - data in decimal format, not bps)
+        - HY OAS > 6.72% (credit market stress - data in decimal format, not bps)
+        - Discount Window > $3,944,055M (Fed emergency lending - 95th percentile)
+
+        CALIBRATED thresholds based on historical P95 (95th percentile).
+        Expected: ~5% of days marked as crisis (not 99.9%).
 
         Parameters
         ----------
@@ -106,12 +109,15 @@ class CrisisPredictor:
         """
         df = df.copy()
 
-        # Define crisis conditions
+        # Define crisis conditions (CALIBRATED to P95 of historical data)
+        # These thresholds were derived from calibration analysis showing:
+        # - Old DISCOUNT_WINDOW threshold (10,000) caused 100% false positives
+        # - cp_tbill_spread and HY_OAS are in decimal format (not basis points)
         crisis_conditions = (
-            (df['VIX'] > 35) |
-            (df.get('cp_tbill_spread', pd.Series(0, index=df.index)) > 150) |
-            (df.get('HY_OAS', pd.Series(0, index=df.index)) > 700) |
-            (df.get('DISCOUNT_WINDOW', pd.Series(0, index=df.index)) > 10000)
+            (df['VIX'] > 30.47) |
+            (df.get('cp_tbill_spread', pd.Series(0, index=df.index)) > 0.44) |
+            (df.get('HY_OAS', pd.Series(0, index=df.index)) > 6.72) |
+            (df.get('DISCOUNT_WINDOW', pd.Series(0, index=df.index)) > 3944055)
         )
 
         # Look ahead N days (is there a crisis in next N days?)
