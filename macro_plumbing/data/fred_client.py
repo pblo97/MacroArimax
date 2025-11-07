@@ -196,10 +196,17 @@ class FREDClient:
 
         # Combine into DataFrame
         df = pd.DataFrame(all_series)
+
+        # Ensure we have a DatetimeIndex (handle case where all fetches failed)
+        if len(df) == 0 or not isinstance(df.index, pd.DatetimeIndex):
+            # Create empty DataFrame with DatetimeIndex
+            df = pd.DataFrame(index=pd.date_range(start=start_date or "2015-01-01", periods=0))
+
         df.index.name = "date"
 
-        # Resample to daily and forward fill
-        df = df.resample("D").last().ffill()
+        # Resample to daily and forward fill (only if we have data)
+        if len(df) > 0:
+            df = df.resample("D").last().ffill()
 
         return df
 

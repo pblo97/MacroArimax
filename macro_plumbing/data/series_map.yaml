@@ -160,6 +160,32 @@ market_indicators:
     category: "volatility"
     optional: true  # May not always be available
 
+  # FX Rates (for Phase 2 proxies)
+  DEXUSEU:
+    code: "DEXUSEU"
+    description: "U.S. / Euro Foreign Exchange Rate (daily)"
+    transform: "level"
+    winsorize: false
+    category: "fx"
+    optional: true
+
+  EUR3MTD156N:
+    code: "EUR3MTD156N"
+    description: "3-Month Euro Interbank Offered Rate (EURIBOR)"
+    transform: "level"
+    winsorize: false
+    category: "rates"
+    optional: true
+
+  # MMF Data (for Phase 2 proxies)
+  MMMFFAQ027S:
+    code: "MMMFFAQ027S"
+    description: "Money Market Funds; Total Financial Assets, Level"
+    transform: "level"
+    winsorize: false
+    category: "money_markets"
+    optional: true
+
 # ==========================
 # Derived Features Configuration
 # ==========================
