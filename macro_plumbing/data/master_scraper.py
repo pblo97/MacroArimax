@@ -345,7 +345,7 @@ def quick_fetch(
     Returns
     -------
     pd.DataFrame
-        Unified DataFrame with all series
+        Unified DataFrame with all series (including derived features)
     """
     fetcher = MasterDataFetcher(
         fred_api_key=fred_api_key,
@@ -355,6 +355,10 @@ def quick_fetch(
 
     data = fetcher.fetch_all()
     df = fetcher.to_dataframe(data)
+
+    # Compute derived features (spreads, net_liquidity, deltas, calendar flags)
+    df = fetcher.fred.compute_derived_features(df)
+
     fetcher.close()
 
     return df
