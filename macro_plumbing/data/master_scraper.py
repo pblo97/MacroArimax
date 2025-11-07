@@ -275,11 +275,22 @@ class MasterDataFetcher:
         """
         logger.info("Merging all data sources...")
 
+        # Log what data we have
+        valid_sources = [name for name, df in data.items() if df is not None]
+        null_sources = [name for name, df in data.items() if df is None]
+
+        logger.info(f"  Valid sources ({len(valid_sources)}): {', '.join(valid_sources)}")
+        if null_sources:
+            logger.warning(f"  Null sources ({len(null_sources)}): {', '.join(null_sources)}")
+
         df_merged = None
 
         for name, df in data.items():
             if df is None:
+                logger.warning(f"  Skipping {name}: None")
                 continue
+
+            logger.info(f"  Adding {name}: {len(df)} rows × {len(df.columns)} cols")
 
             if df_merged is None:
                 df_merged = df
@@ -289,7 +300,7 @@ class MasterDataFetcher:
 
         if df_merged is not None:
             # Forward fill missing data (max 5 days)
-            df_merged = df_merged.fillna(method='ffill', limit=5)
+            df_merged = df_merged.ffill(limit=5)
 
             logger.info(f"✅ Merged data: {len(df_merged)} rows × {len(df_merged.columns)} columns")
 
