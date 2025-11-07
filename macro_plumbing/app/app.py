@@ -1154,7 +1154,18 @@ if st.session_state.get('run_analysis', False):
 
                     # Filter training data (up to 1 year ago)
                     train_end = df.index[-252] if len(df) > 252 else df.index[-50]
-                    df_train = df.loc[:train_end]
+                    df_train = df.loc[:train_end].copy()
+
+                    # DEBUG: Check crisis labels before training
+                    df_train_labeled = predictor.create_labels(df_train)
+                    crisis_count = df_train_labeled['crisis_ahead'].sum()
+                    total_count = len(df_train_labeled)
+                    crisis_pct = crisis_count / total_count * 100 if total_count > 0 else 0
+
+                    st.info(f"🔍 Training data: {total_count} days, {crisis_count} marked as crisis ({crisis_pct:.1f}%)")
+
+                    if crisis_pct > 50:
+                        st.error(f"⚠️ WARNING: {crisis_pct:.1f}% of training data is 'crisis' - model may overpredict!")
 
                     predictor.train(df_train)
 
