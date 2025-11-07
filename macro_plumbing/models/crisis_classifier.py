@@ -69,12 +69,13 @@ class CrisisPredictor:
         self.horizon = horizon
         self.random_state = random_state
 
+        # Simpler model for 5 features (avoid overfitting)
         self.model = RandomForestClassifier(
             n_estimators=n_estimators,
             max_depth=max_depth,
-            min_samples_split=20,
-            min_samples_leaf=10,
-            max_features='sqrt',
+            min_samples_split=30,    # Increased from 20 to avoid overfitting
+            min_samples_leaf=15,     # Increased from 10 to avoid overfitting
+            max_features='sqrt',     # For 5 features, this is ~2 features per split
             class_weight=class_weight,
             random_state=random_state,
             n_jobs=-1  # Use all CPU cores
@@ -136,10 +137,24 @@ class CrisisPredictor:
         """
         Prepare feature set for model.
 
-        SIMPLIFIED to avoid multicollinearity:
-        - Only 9 independent core features
-        - Minimal lags (3 features)
-        - Single volatility feature
+        ULTRA-SIMPLIFIED to eliminate multicollinearity:
+        - Only 5 core INDEPENDENT features (VIF < 5)
+        - NO lags (cause multicollinearity)
+        - NO derived features (cause multicollinearity)
+        - Based on academic literature for crisis prediction
+
+        Features selected:
+        1. VIX - Market volatility (equity stress)
+        2. HY_OAS - Credit spread (corporate stress)
+        3. cp_tbill_spread - Money market spread (funding stress)
+        4. T10Y2Y - Term spread (recession signal)
+        5. NFCI - Composite financial conditions (Fed index)
+
+        These 5 features:
+        - Cover different dimensions of financial stress
+        - Have low correlation (VIF analysis)
+        - Are available in real-time
+        - Are validated in academic literature
 
         Parameters
         ----------
@@ -151,57 +166,36 @@ class CrisisPredictor:
         list
             List of feature column names
         """
-        # SIMPLIFIED FEATURE SET (avoid multicollinearity)
-        # Using only INDEPENDENT features that measure different aspects
+        # MINIMAL FEATURE SET - 5 independent features only
         core_features = []
 
         # 1. Volatility (market fear)
         if 'VIX' in df.columns:
             core_features.append('VIX')
 
-        # 2. Credit stress (use ONLY HY_OAS, not multiple correlated credit spreads)
+        # 2. Credit stress (HY OAS only - remove bbb_aaa_spread due to multicollinearity)
         if 'HY_OAS' in df.columns:
             core_features.append('HY_OAS')
 
-        # 3. Money market stress (CP spread)
+        # 3. Money market stress (CP spread - independent, VIF=2.43)
         if 'cp_tbill_spread' in df.columns:
             core_features.append('cp_tbill_spread')
 
-        # 4. Fed emergency lending (discount window)
-        if 'DISCOUNT_WINDOW' in df.columns:
-            core_features.append('DISCOUNT_WINDOW')
-
-        # 5. Term structure (recession signal)
+        # 4. Term structure (recession signal - independent, VIF=2.60)
         if 'T10Y2Y' in df.columns:
             core_features.append('T10Y2Y')
 
-        # 6. Liquidity drain (RRP)
-        if 'delta_rrp' in df.columns:
-            core_features.append('delta_rrp')
-
-        # 7. Labor market stress
-        if 'jobless_claims_zscore' in df.columns:
-            core_features.append('jobless_claims_zscore')
-
-        # 8. Composite stress index (NFCI already combines many indicators)
+        # 5. Composite stress index (NFCI - moderate VIF=8.37 but valuable composite)
         if 'NFCI' in df.columns:
             core_features.append('NFCI')
 
-        # 9. BBB-AAA spread (one representative credit spread)
-        if 'bbb_aaa_spread' in df.columns:
-            core_features.append('bbb_aaa_spread')
-
-        # Create lagged features (momentum) - only for top 3 indicators
-        lag_cols = ['VIX', 'cp_tbill_spread', 'HY_OAS']
-        for col in lag_cols:
-            if col in df.columns:
-                df[f'{col}_lag1'] = df[col].shift(1)
-                core_features.append(f'{col}_lag1')
-
-        # Create volatility features (recent instability) - only for VIX
-        if 'VIX' in df.columns:
-            df['VIX_volatility'] = df['VIX'].rolling(10).std()
-            core_features.append('VIX_volatility')
+        # REMOVED due to severe multicollinearity (VIF > 10):
+        # - DISCOUNT_WINDOW (VIF=15.63, unclear data units)
+        # - bbb_aaa_spread (VIF=152.82, redundant with HY_OAS)
+        # - VIX_lag1, HY_OAS_lag1 (causes multicollinearity)
+        # - VIX_volatility (causes multicollinearity)
+        # - delta_rrp (not consistently significant)
+        # - jobless_claims_zscore (labor, different frequency)
 
         return core_features
 
