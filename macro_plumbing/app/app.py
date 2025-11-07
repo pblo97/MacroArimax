@@ -1311,6 +1311,105 @@ if st.session_state.get('run_analysis', False):
                 fig_importance.update_layout(yaxis={'categoryorder': 'total ascending'})
                 st.plotly_chart(fig_importance, use_container_width=True)
 
+                # === CALIBRATION ANALYSIS ===
+                with st.expander("⚙️ Calibración de Umbrales (Threshold Calibration)"):
+                    st.markdown("""
+                    **Análisis de los umbrales actuales vs datos históricos**
+
+                    Si muchos días exceden los umbrales, el modelo marcará la mayoría como "crisis" y sobrepredicirá.
+                    """)
+
+                    # Analyze each crisis indicator
+                    indicators_config = {
+                        'VIX': {'threshold': 35, 'unit': 'index'},
+                        'cp_tbill_spread': {'threshold': 150, 'unit': 'bps'},
+                        'HY_OAS': {'threshold': 700, 'unit': 'bps'},
+                        'DISCOUNT_WINDOW': {'threshold': 10000, 'unit': 'M$'}
+                    }
+
+                    calibration_results = []
+
+                    for indicator, config in indicators_config.items():
+                        if indicator not in df.columns:
+                            continue
+
+                        series = df[indicator].dropna()
+                        if len(series) == 0:
+                            continue
+
+                        threshold = config['threshold']
+                        days_above = (series > threshold).sum()
+                        pct_above = (days_above / len(series)) * 100
+
+                        # Calculate percentiles
+                        p50 = series.quantile(0.50)
+                        p75 = series.quantile(0.75)
+                        p90 = series.quantile(0.90)
+                        p95 = series.quantile(0.95)
+                        p99 = series.quantile(0.99)
+
+                        current_val = series.iloc[-1]
+
+                        # Determine status
+                        if pct_above > 50:
+                            status = "🔴 CRÍTICO"
+                            issue = f"{pct_above:.1f}% de días exceden umbral - marca mayoría como crisis!"
+                        elif pct_above > 20:
+                            status = "🟡 ADVERTENCIA"
+                            issue = f"{pct_above:.1f}% de días exceden umbral - demasiado alto"
+                        elif pct_above > 10:
+                            status = "🟢 OK (alto)"
+                            issue = f"{pct_above:.1f}% esperado para estrés"
+                        else:
+                            status = "✅ BUENO"
+                            issue = f"{pct_above:.1f}% representa eventos raros"
+
+                        calibration_results.append({
+                            'Indicador': indicator,
+                            'Umbral Actual': f"{threshold:,.0f} {config['unit']}",
+                            'Valor Actual': f"{current_val:,.2f}",
+                            '% Días > Umbral': f"{pct_above:.1f}%",
+                            'P95 (sugerido)': f"{p95:,.2f}",
+                            'Status': status,
+                            'Diagnóstico': issue
+                        })
+
+                    if calibration_results:
+                        st.dataframe(
+                            pd.DataFrame(calibration_results),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                        st.markdown("""
+                        **Interpretación:**
+                        - **% Días > Umbral**: Si es >20%, el umbral está muy bajo
+                        - **P95 (percentil 95)**: Umbral sugerido que marca ~5% de días como crisis
+                        - **Status**:
+                          - ✅ BUENO: <10% días exceden (eventos raros)
+                          - 🟢 OK: 10-20% (estrés moderado)
+                          - 🟡 ADVERTENCIA: 20-50% (umbral bajo)
+                          - 🔴 CRÍTICO: >50% (umbral muy bajo, marca mayoría como crisis)
+
+                        **Umbrales Sugeridos (P95):**
+                        """)
+
+                        # Generate calibrated code
+                        suggested_code = "crisis_conditions = (\n"
+                        for result in calibration_results:
+                            indicator = result['Indicador']
+                            p95_str = result['P95 (sugerido)']
+                            p95_val = float(p95_str.replace(',', ''))
+                            suggested_code += f"    (df['{indicator}'] > {p95_val:.2f}) |\n"
+                        suggested_code = suggested_code.rstrip(' |\n') + "\n)"
+
+                        st.code(suggested_code, language='python')
+
+                        st.info("""
+                        💡 **Recomendación**: Si ves 🔴 CRÍTICO o 🟡 ADVERTENCIA, actualiza los umbrales
+                        en `crisis_classifier.py` usando los valores P95 sugeridos arriba.
+                        """)
+
                 # === PREDICTION EXPLANATION ===
                 with st.expander("🔍 Prediction Explanation (Why this probability?)"):
                     st.markdown(f"""
@@ -1362,14 +1461,27 @@ if st.session_state.get('run_analysis', False):
                     - Balanced class weights (handles imbalanced data)
                     - Time-series cross-validation
 
-                    **Features Used:** ~40+ features including:
-                    - Spreads (CP, credit, repo)
-                    - Volatility (VIX)
-                    - Fed facilities (Discount Window)
-                    - Liquidity metrics (RRP, TGA, reserves)
-                    - Real economy (jobless claims, credit)
-                    - Lagged features (1-day, 3-day)
-                    - Volatility features (rolling std)
+                    **Features Used:** 13 INDEPENDENT features (reduced from ~40 to avoid multicollinearity):
+
+                    *Core Features (9):*
+                    - **VIX**: Market volatility/fear
+                    - **HY_OAS**: High-yield credit stress
+                    - **cp_tbill_spread**: Money market stress
+                    - **DISCOUNT_WINDOW**: Fed emergency lending
+                    - **T10Y2Y**: Yield curve (recession signal)
+                    - **delta_rrp**: Liquidity drain
+                    - **jobless_claims_zscore**: Labor market stress
+                    - **NFCI**: Composite financial stress index
+                    - **bbb_aaa_spread**: Investment-grade credit spread
+
+                    *Derived Features (4):*
+                    - Lags: VIX_lag1, cp_tbill_spread_lag1, HY_OAS_lag1
+                    - Volatility: VIX_volatility (10-day rolling std)
+
+                    **Why Only 13 Features?**
+                    Multiple correlated features (e.g., HY_OAS + BBB_OAS + BB_OAS) create multicollinearity,
+                    causing the model to see "unanimous consensus" and overpredict crises. Using independent
+                    features ensures the model only predicts crisis when multiple DIFFERENT signals align.
 
                     **Expected Performance:**
                     - AUC: 0.75-0.85
