@@ -90,6 +90,24 @@ core_plumbing:
     transform: level
     winsorize: true
     category: banking
+  MORTGAGE_30Y:
+    code: MORTGAGE30US
+    description: 30-Year Fixed Rate Mortgage Average
+    transform: level
+    winsorize: false
+    category: housing
+  HOUSING_STARTS:
+    code: HOUST
+    description: 'Housing Starts: Total New Privately Owned'
+    transform: level
+    winsorize: true
+    category: housing
+  BUILDING_PERMITS:
+    code: PERMIT
+    description: New Private Housing Units Authorized by Building Permits
+    transform: level
+    winsorize: true
+    category: housing
 stress_indicators:
   NFCI:
     code: NFCI
@@ -151,6 +169,36 @@ stress_indicators:
     transform: level
     winsorize: false
     category: term_structure
+  RETAIL_SALES:
+    code: RSXFS
+    description: 'Advance Retail Sales: Retail Trade'
+    transform: level
+    winsorize: true
+    category: real_economy
+  CAPACITY_UTILIZATION:
+    code: TCU
+    description: 'Capacity Utilization: Total Industry'
+    transform: level
+    winsorize: false
+    category: real_economy
+  CONTINUED_CLAIMS:
+    code: CCSA
+    description: Continued Claims (Insured Unemployment)
+    transform: level
+    winsorize: true
+    category: labor
+  LABOR_PARTICIPATION:
+    code: CIVPART
+    description: Labor Force Participation Rate
+    transform: level
+    winsorize: false
+    category: labor
+  PART_TIME_ECONOMIC:
+    code: LNS12032194
+    description: Part-Time for Economic Reasons
+    transform: level
+    winsorize: true
+    category: labor
 reference_rates:
   TB3MS:
     code: TB3MS
@@ -206,6 +254,24 @@ reference_rates:
     transform: level
     winsorize: false
     category: inflation
+  EURIBOR_3M:
+    code: IR3TED01EZM156N
+    description: 3-Month Euribor Rate
+    transform: level
+    winsorize: false
+    category: international
+  JAPAN_10Y:
+    code: IRLTLT01JPM156N
+    description: '10-Year Government Bond Yields: Japan'
+    transform: level
+    winsorize: false
+    category: international
+  UK_10Y:
+    code: IRLTLT01GBM156N
+    description: '10-Year Government Bond Yields: United Kingdom'
+    transform: level
+    winsorize: false
+    category: international
 market_indicators:
   SP500:
     code: SP500
@@ -253,12 +319,42 @@ market_indicators:
     transform: level
     winsorize: true
     category: credit
+  CORP_BB_OAS:
+    code: BAMLH0A1HYBB
+    description: ICE BofA BB US High Yield OAS
+    transform: level
+    winsorize: true
+    category: credit
+  CORP_CCC_OAS:
+    code: BAMLH0A3HYC
+    description: ICE BofA CCC & Lower US High Yield OAS
+    transform: level
+    winsorize: true
+    category: credit
   DOLLAR_INDEX:
     code: DTWEXBGS
     description: 'Trade Weighted U.S. Dollar Index: Broad'
     transform: level
     winsorize: false
     category: fx
+  DOLLAR_INDEX_MAJOR:
+    code: DTWEXBMGS
+    description: 'Trade Weighted U.S. Dollar Index: Major Currencies'
+    transform: level
+    winsorize: false
+    category: fx
+  GOLD_PRICE:
+    code: GOLDAMGBD228NLBM
+    description: Gold Fixing Price 3:00 PM (London time) in London Bullion Market
+    transform: level
+    winsorize: true
+    category: safe_haven
+  WTI_OIL:
+    code: DCOILWTICO
+    description: 'Crude Oil Prices: West Texas Intermediate (WTI)'
+    transform: level
+    winsorize: true
+    category: commodities
   INDUSTRIAL_PRODUCTION:
     code: INDPRO
     description: Industrial Production Index
@@ -277,6 +373,24 @@ market_indicators:
     transform: level
     winsorize: false
     category: labor
+  CONSUMER_CREDIT:
+    code: TOTALSL
+    description: Total Consumer Credit Outstanding
+    transform: level
+    winsorize: true
+    category: credit
+  CREDIT_CARD_DELINQ:
+    code: DRCCLACBS
+    description: Delinquency Rate on Credit Card Loans, All Commercial Banks
+    transform: level
+    winsorize: true
+    category: credit
+  AUTO_LOAN_DELINQ:
+    code: DRALSACBS
+    description: Delinquency Rate on Auto Loans, All Commercial Banks
+    transform: level
+    winsorize: true
+    category: credit
 derived_features:
   sofr_effr_spread:
     formula: SOFR - EFFR
@@ -368,6 +482,45 @@ derived_features:
   jobless_claims_zscore:
     formula: zscore(JOBLESS_CLAIMS, window=52)
     description: Jobless claims z-score (stress indicator)
+  gold_zscore:
+    formula: zscore(GOLD_PRICE, window=252)
+    description: Gold price z-score (safe haven demand)
+  oil_zscore:
+    formula: zscore(WTI_OIL, window=252)
+    description: Oil price z-score (commodity stress)
+  vix_alarm:
+    formula: VIX > 30
+    description: VIX alarm (fear threshold)
+  euribor_ois_proxy:
+    formula: EURIBOR_3M - SOFR
+    description: Euribor-SOFR spread (offshore dollar stress proxy)
+  us_japan_spread:
+    formula: DGS10 - JAPAN_10Y
+    description: US-Japan 10Y spread (carry trade monitor)
+  continued_claims_zscore:
+    formula: zscore(CONTINUED_CLAIMS, window=52)
+    description: Continued claims z-score (labor market stress)
+  labor_slack:
+    formula: UNEMPLOYMENT_RATE + (PART_TIME_ECONOMIC / LABOR_PARTICIPATION * 100)
+    description: U-6 style underemployment proxy
+  mortgage_spread:
+    formula: MORTGAGE_30Y - DGS10
+    description: Mortgage-Treasury spread (housing affordability)
+  housing_momentum:
+    formula: diff(HOUSING_STARTS)
+    description: Monthly change in housing starts
+  consumer_credit_growth:
+    formula: pct_change(CONSUMER_CREDIT, periods=12)
+    description: YoY consumer credit growth
+  delinquency_index:
+    formula: (CREDIT_CARD_DELINQ + AUTO_LOAN_DELINQ) / 2
+    description: Average consumer delinquency rate
+  retail_sales_momentum:
+    formula: pct_change(RETAIL_SALES, periods=3)
+    description: 3-month retail sales growth
+  capacity_gap:
+    formula: 85 - CAPACITY_UTILIZATION
+    description: Economic slack (85% baseline)
 calendar_events:
   month_end:
     description: Last business day of month
