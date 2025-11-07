@@ -422,7 +422,10 @@ class CrisisPredictor:
         print(f"OVERALL BACKTEST PERFORMANCE")
         print(f"{'='*60}")
         print(f"Average AUC: {avg_auc:.3f}")
-        print(f"AUC by fold: {[f\"{r['auc']:.3f}\" for r in results]}")
+
+        # Format AUC scores
+        auc_scores = [f"{r['auc']:.3f}" for r in results]
+        print(f"AUC by fold: {auc_scores}")
 
         if avg_auc > 0.80:
             print("✅ EXCELLENT - Model has strong predictive power")
