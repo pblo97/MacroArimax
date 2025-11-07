@@ -20,5 +20,11 @@ fredapi
 plotly
 pyyaml
 
+# Web scraping (Phase 2 data sources)
+beautifulsoup4
+lxml
+openpyxl
+requests
+
 # Optional (lightweight)
 pyvis
