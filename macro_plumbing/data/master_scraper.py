@@ -171,17 +171,20 @@ class MasterDataFetcher:
 
     def _fetch_scraped_parallel(self) -> Dict[str, pd.DataFrame]:
         """Fetch scraped data in parallel."""
+        # Pass fred_api_key to functions that need it for proxies
+        api_key = self.fred_api_key
+
         tasks = [
-            ('dealer_leverage', fetch_dealer_leverage),
+            ('dealer_leverage', lambda: fetch_dealer_leverage(fred_api_key=api_key)),
             ('triparty_repo', fetch_triparty_repo),
             ('soma_holdings', fetch_soma_holdings),
             ('reference_rates', fetch_reference_rates_with_dispersion),
-            ('ecb_fx_basis', fetch_ecb_fx_basis),
+            ('ecb_fx_basis', lambda: fetch_ecb_fx_basis(fred_api_key=api_key)),
             ('estr', fetch_estr),
             ('bis_credit_gaps', fetch_bis_credit_gaps),
-            ('ici_mmf_flows', fetch_ici_mmf_flows),
-            ('vrp', compute_variance_risk_premium),
-            ('convenience_yield', compute_convenience_yield)
+            ('ici_mmf_flows', lambda: fetch_ici_mmf_flows(fred_api_key=api_key)),
+            ('vrp', lambda: compute_variance_risk_premium(fred_api_key=api_key)),
+            ('convenience_yield', lambda: compute_convenience_yield(fred_api_key=api_key))
         ]
 
         return self.scraper.scrape_all(tasks, use_cache=self.use_cache)
@@ -190,17 +193,20 @@ class MasterDataFetcher:
         """Fetch scraped data sequentially."""
         results = {}
 
+        # Get API key for proxy functions
+        api_key = self.fred_api_key
+
         fetchers = {
-            'dealer_leverage': fetch_dealer_leverage,
+            'dealer_leverage': lambda: fetch_dealer_leverage(fred_api_key=api_key),
             'triparty_repo': fetch_triparty_repo,
             'soma_holdings': fetch_soma_holdings,
             'reference_rates': fetch_reference_rates_with_dispersion,
-            'ecb_fx_basis': fetch_ecb_fx_basis,
+            'ecb_fx_basis': lambda: fetch_ecb_fx_basis(fred_api_key=api_key),
             'estr': fetch_estr,
             'bis_credit_gaps': fetch_bis_credit_gaps,
-            'ici_mmf_flows': fetch_ici_mmf_flows,
-            'vrp': compute_variance_risk_premium,
-            'convenience_yield': compute_convenience_yield
+            'ici_mmf_flows': lambda: fetch_ici_mmf_flows(fred_api_key=api_key),
+            'vrp': lambda: compute_variance_risk_premium(fred_api_key=api_key),
+            'convenience_yield': lambda: compute_convenience_yield(fred_api_key=api_key)
         }
 
         for name, func in fetchers.items():
