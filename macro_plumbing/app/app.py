@@ -117,6 +117,28 @@ if st.session_state.get('run_analysis', False):
                     parallel=True
                 )
 
+                # DEBUG: Show what columns we actually got
+                with st.expander("🔍 DEBUG: Data Fetch Details", expanded=True):
+                    st.write(f"**Total columns received:** {len(df.columns)}")
+                    st.write(f"**Total rows:** {len(df)}")
+                    st.write(f"**Date range:** {df.index.min()} to {df.index.max()}")
+
+                    # Check for Phase 2 columns
+                    phase2_cols = [
+                        'dealer_leverage', 'eur_usd_3m_basis', 'mmf_net_flows',
+                        'vrp', 'convenience_yield', 'sofr_p75', 'effr_p75'
+                    ]
+                    found_phase2 = [col for col in phase2_cols if col in df.columns]
+
+                    st.write(f"**Phase 2 columns found:** {len(found_phase2)}/{len(phase2_cols)}")
+                    if found_phase2:
+                        st.success(f"✅ Found: {', '.join(found_phase2)}")
+                    else:
+                        st.error("❌ No Phase 2 columns found!")
+
+                    st.write("**All columns:**")
+                    st.write(sorted(df.columns.tolist()))
+
                 # Filter by start_date if needed
                 if start_date and df is not None:
                     df = df[df.index >= pd.to_datetime(start_date)]
