@@ -1117,13 +1117,15 @@ if st.session_state.get('run_analysis', False):
         st.markdown("""
         Predicts probability of liquidity crisis in next **5 days** using Random Forest classifier.
 
-        **Crisis Definition (CALIBRATED to P95):**
-        - VIX > 30.47 OR
-        - CP spread > 0.44% OR
-        - HY OAS > 6.72% OR
-        - Discount Window > $3.94M
+        **Crisis Definition (Market Stress Thresholds):**
+        - VIX > 30 (panic level) OR
+        - CP spread > 1.0% (money market freeze) OR
+        - HY OAS > 8.0% (credit crisis)
 
-        *(Thresholds calibrated to 95th percentile of historical data - see Calibración expander)*
+        *(Thresholds based on historical crisis levels: 2008, 2020, etc.)*
+
+        **Note:** DISCOUNT_WINDOW removed from crisis definition due to data unit issues.
+        It remains as a model feature but not in the label definition.
         """)
 
         try:
@@ -1322,12 +1324,13 @@ if st.session_state.get('run_analysis', False):
                     """)
 
                     # Analyze each crisis indicator
-                    # Showing OLD thresholds vs CALIBRATED thresholds
+                    # Showing OLD thresholds vs NEW CALIBRATED thresholds
                     indicators_config = {
-                        'VIX': {'old_threshold': 35, 'new_threshold': 30.47, 'unit': 'index'},
-                        'cp_tbill_spread': {'old_threshold': 150, 'new_threshold': 0.44, 'unit': '% (was bps)'},
-                        'HY_OAS': {'old_threshold': 700, 'new_threshold': 6.72, 'unit': '% (was bps)'},
-                        'DISCOUNT_WINDOW': {'old_threshold': 10000, 'new_threshold': 3944055, 'unit': 'M$'}
+                        'VIX': {'old_threshold': 35, 'new_threshold': 30, 'unit': 'index'},
+                        'cp_tbill_spread': {'old_threshold': 150, 'new_threshold': 1.0, 'unit': '% (decimal)'},
+                        'HY_OAS': {'old_threshold': 700, 'new_threshold': 8.0, 'unit': '% (decimal)'},
+                        # DISCOUNT_WINDOW removed from crisis definition (kept as feature only)
+                        # 'DISCOUNT_WINDOW': {'old_threshold': 10000, 'new_threshold': None, 'unit': 'M$'}
                     }
 
                     calibration_results = []
@@ -1407,8 +1410,8 @@ if st.session_state.get('run_analysis', False):
                         **Umbrales ACTUALES en el modelo (ya calibrados):**
                         """)
 
-                        # Generate calibrated code (already implemented)
-                        suggested_code = "# ESTOS UMBRALES YA ESTÁN IMPLEMENTADOS\ncrisis_conditions = (\n"
+                        # Generate calibrated code (CURRENT implementation)
+                        suggested_code = "# UMBRALES ACTUALES IMPLEMENTADOS (basados en niveles de crisis históricos)\ncrisis_conditions = (\n"
                         for result in calibration_results:
                             indicator = result['Indicador']
                             new_threshold_str = result['Umbral Nuevo (P95)']
@@ -1419,11 +1422,14 @@ if st.session_state.get('run_analysis', False):
                         st.code(suggested_code, language='python')
 
                         st.success("""
-                        ✅ **Umbrales Calibrados**: Los umbrales ya están actualizados en `crisis_classifier.py`
-                        basándose en el percentil 95 (P95) de datos históricos.
+                        ✅ **Umbrales Calibrados**: Los umbrales están basados en niveles de crisis históricos
+                        (2008, 2020) en lugar de P95, para mejor detección.
 
-                        Si ves status ✅ BUENO en todos los indicadores, el modelo debe predecir ~5-20% de
-                        probabilidad de crisis en condiciones normales (no 99%).
+                        - VIX > 30 (pánico)
+                        - CP spread > 1.0% (congelamiento money market)
+                        - HY OAS > 8.0% (crisis crediticia)
+
+                        El modelo debe predecir ~5-20% probabilidad de crisis en condiciones normales.
 
                         **Recarga la página o presiona "🔄 Retrain Model" para aplicar los nuevos umbrales.**
                         """)
