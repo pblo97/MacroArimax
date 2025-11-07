@@ -373,6 +373,12 @@ market_indicators:
     transform: level
     winsorize: false
     category: labor
+  U6_UNDEREMPLOYMENT:
+    code: U6RATE
+    description: 'Total Unemployed + Marginally Attached + Part-Time for Economic Reasons'
+    transform: level
+    winsorize: false
+    category: labor
   CONSUMER_CREDIT:
     code: TOTALSL
     description: Total Consumer Credit Outstanding
@@ -500,9 +506,11 @@ derived_features:
   continued_claims_zscore:
     formula: zscore(CONTINUED_CLAIMS, window=52)
     description: Continued claims z-score (labor market stress)
-  labor_slack:
-    formula: UNEMPLOYMENT_RATE + (PART_TIME_ECONOMIC / LABOR_PARTICIPATION * 100)
-    description: U-6 style underemployment proxy
+  # REMOVED: labor_slack (incorrect formula - mixed incompatible units)
+  # Use U6_UNDEREMPLOYMENT (U6RATE) series directly instead
+  # labor_slack:
+  #   formula: UNEMPLOYMENT_RATE + (PART_TIME_ECONOMIC / LABOR_PARTICIPATION * 100)
+  #   description: U-6 style underemployment proxy (INCORRECT)
   mortgage_spread:
     formula: MORTGAGE_30Y - DGS10
     description: Mortgage-Treasury spread (housing affordability)
