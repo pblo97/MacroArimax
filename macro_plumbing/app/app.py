@@ -1131,6 +1131,12 @@ if st.session_state.get('run_analysis', False):
 
             model_path = Path("macro_plumbing/models/trained_crisis_predictor.pkl")
 
+            # CRITICAL FIX: Remove labor_slack if it exists (has incorrect values)
+            # labor_slack formula was broken and causes false crisis alerts
+            if 'labor_slack' in df.columns:
+                df = df.drop(columns=['labor_slack'])
+                st.info("ℹ️ Removed labor_slack (incorrect formula) - using U6_UNDEREMPLOYMENT instead")
+
             # Check if model exists
             if not model_path.exists():
                 st.warning("⚠️ Model not trained yet. Training now (this may take 30 seconds)...")
@@ -1158,7 +1164,11 @@ if st.session_state.get('run_analysis', False):
 
             # Predict on recent data
             recent_window = min(30, len(df))
-            df_recent = df.iloc[-recent_window:]
+            df_recent = df.iloc[-recent_window:].copy()
+
+            # Also remove labor_slack from prediction data if it exists
+            if 'labor_slack' in df_recent.columns:
+                df_recent = df_recent.drop(columns=['labor_slack'])
 
             try:
                 probas = predictor.predict_proba(df_recent)
