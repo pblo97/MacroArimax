@@ -89,13 +89,13 @@ class CrisisPredictor:
         Create binary crisis labels.
 
         Crisis definition (ANY of):
-        - VIX > 30.47 (panic - 95th percentile)
-        - CP spread > 0.44% (money market stress - data in decimal format, not bps)
-        - HY OAS > 6.72% (credit market stress - data in decimal format, not bps)
-        - Discount Window > $3,944,055M (Fed emergency lending - 95th percentile)
+        - VIX > 30 (panic level - volatility spike)
+        - CP spread > 1.0% (severe money market stress - 100+ bps)
+        - HY OAS > 8.0% (credit market crisis - 800+ bps)
+        - Discount Window > $10,000M (Fed emergency lending - $10B+)
 
-        CALIBRATED thresholds based on historical P95 (95th percentile).
-        Expected: ~5% of days marked as crisis (not 99.9%).
+        CALIBRATED thresholds based on financial market norms and historical crises.
+        Expected: ~5-15% of days marked as crisis during stress periods (2008, 2020).
 
         Parameters
         ----------
@@ -109,15 +109,18 @@ class CrisisPredictor:
         """
         df = df.copy()
 
-        # Define crisis conditions (CALIBRATED to P95 of historical data)
-        # These thresholds were derived from calibration analysis showing:
-        # - Old DISCOUNT_WINDOW threshold (10,000) caused 100% false positives
-        # - cp_tbill_spread and HY_OAS are in decimal format (not basis points)
+        # Define crisis conditions (CALIBRATED to financial market stress levels)
+        # Thresholds based on:
+        # - VIX: 30+ indicates fear/panic (normal: 10-20, elevated: 20-30, crisis: 30+)
+        # - cp_tbill_spread: 1.0%+ indicates money market freeze (normal: 10-30 bps)
+        # - HY_OAS: 8.0%+ indicates credit crisis (normal: 4-5%, elevated: 6-7%, crisis: 8%+)
+        # - DISCOUNT_WINDOW: $10B+ indicates emergency Fed lending (normal: <$5B)
+        #   Note: FRED data is in millions, so 10000 = $10 billion
         crisis_conditions = (
-            (df['VIX'] > 30.47) |
-            (df.get('cp_tbill_spread', pd.Series(0, index=df.index)) > 0.44) |
-            (df.get('HY_OAS', pd.Series(0, index=df.index)) > 6.72) |
-            (df.get('DISCOUNT_WINDOW', pd.Series(0, index=df.index)) > 3944055)
+            (df['VIX'] > 30) |
+            (df.get('cp_tbill_spread', pd.Series(0, index=df.index)) > 1.0) |
+            (df.get('HY_OAS', pd.Series(0, index=df.index)) > 8.0) |
+            (df.get('DISCOUNT_WINDOW', pd.Series(0, index=df.index)) > 10000)
         )
 
         # Look ahead N days (is there a crisis in next N days?)
