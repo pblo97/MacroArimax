@@ -1684,14 +1684,33 @@ if st.session_state.get('run_analysis', False):
                     **Top Contributing Features:**
                     """)
 
-                    # Get current feature values
-                    top_features = importance_df.head(10)['feature'].tolist()
+                    # Get current feature values (using coefficients for Logistic Regression)
+                    if hasattr(predictor, 'coefficients_'):
+                        # Sort by absolute coefficient value to get most influential features
+                        top_features = predictor.coefficients_.head(10)['feature'].tolist()
+                    else:
+                        # Fallback to model features if coefficients not available
+                        top_features = predictor.features[:10] if hasattr(predictor, 'features') else []
 
                     feature_values = []
                     for feat in top_features:
                         if feat in df.columns:
                             val = df[feat].iloc[-1]
-                            feature_values.append({'Feature': feat, 'Current Value': f'{val:.2f}'})
+
+                            # Get coefficient if available
+                            if hasattr(predictor, 'coefficients_'):
+                                coef_row = predictor.coefficients_[predictor.coefficients_['feature'] == feat]
+                                if not coef_row.empty:
+                                    coef_val = coef_row['coefficient'].iloc[0]
+                                    effect = '↑ Crisis' if coef_val > 0 else '↓ Crisis'
+                                    feature_values.append({
+                                        'Feature': feat,
+                                        'Current Value': f'{val:.2f}',
+                                        'Coefficient': f'{coef_val:.3f}',
+                                        'Effect': effect
+                                    })
+                            else:
+                                feature_values.append({'Feature': feat, 'Current Value': f'{val:.2f}'})
 
                     if feature_values:
                         st.table(pd.DataFrame(feature_values))
