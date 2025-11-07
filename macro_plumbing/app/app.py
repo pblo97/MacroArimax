@@ -1133,9 +1133,16 @@ if st.session_state.get('run_analysis', False):
 
             # CRITICAL FIX: Remove labor_slack if it exists (has incorrect values)
             # labor_slack formula was broken and causes false crisis alerts
+            labor_slack_removed = False
             if 'labor_slack' in df.columns:
                 df = df.drop(columns=['labor_slack'])
-                st.info("ℹ️ Removed labor_slack (incorrect formula) - using U6_UNDEREMPLOYMENT instead")
+                labor_slack_removed = True
+                st.info("ℹ️ Removed labor_slack (incorrect formula) - will retrain model")
+
+                # Delete old model if it was trained with labor_slack
+                if model_path.exists():
+                    model_path.unlink()
+                    st.warning("🗑️ Deleted old model (was trained with bad labor_slack)")
 
             # Check if model exists
             if not model_path.exists():
