@@ -50,3 +50,9 @@ htmlcov/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Data caches (scraping & FRED)
+.scraping_cache/
+.fred_cache/
+*.pkl
+*.cache

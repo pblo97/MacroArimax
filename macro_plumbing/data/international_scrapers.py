@@ -162,11 +162,11 @@ def _compute_fx_basis_proxy(fred_api_key: Optional[str] = None) -> Optional[pd.D
             # Ultra fallback: assume EUR rate = US rate - 100bp (historical avg)
             eur_3m = us_3m.copy() - 1.0
 
-        # Align
+        # Align (fetch_series returns Series, not DataFrame)
         df = pd.DataFrame({
-            'spot': spot_eur_usd.iloc[:, 0],
-            'us_rate': us_3m.iloc[:, 0],
-            'eur_rate': eur_3m.iloc[:, 0]
+            'spot': spot_eur_usd,
+            'us_rate': us_3m,
+            'eur_rate': eur_3m
         }).dropna()
 
         # Compute implied forward (3 months)
@@ -557,10 +557,10 @@ def compute_variance_risk_premium(fred_api_key: Optional[str] = None) -> Optiona
         if spx is None:
             return None
 
-        # Align
+        # Align (fetch_series returns Series, not DataFrame)
         df = pd.DataFrame({
-            'vix': vix.iloc[:, 0],
-            'spx': spx.iloc[:, 0]
+            'vix': vix,
+            'spx': spx
         }).dropna()
 
         # Compute realized variance (21-day rolling)
@@ -609,10 +609,10 @@ def compute_convenience_yield(fred_api_key: Optional[str] = None) -> Optional[pd
         if sofr is None:
             return None
 
-        # Align
+        # Align (fetch_series returns Series, not DataFrame)
         df = pd.DataFrame({
-            'tb3m': tb3m.iloc[:, 0],
-            'sofr': sofr.iloc[:, 0]
+            'tb3m': tb3m,
+            'sofr': sofr
         }).dropna()
 
         # Convenience yield
