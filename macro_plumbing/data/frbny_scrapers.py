@@ -43,13 +43,18 @@ warnings.filterwarnings('ignore')
 # ============================================================================
 
 @retry_with_backoff(max_retries=5, base_delay=2.0)
-def fetch_dealer_leverage() -> Optional[pd.DataFrame]:
+def fetch_dealer_leverage(fred_api_key: Optional[str] = None) -> Optional[pd.DataFrame]:
     """
     Fetch Primary Dealer leverage ratio from FRBNY.
 
     Source: https://www.newyorkfed.org/markets/primarydealers.html
     Frequency: Weekly (Wednesday)
     Data: Total Assets, Net Capital → Leverage
+
+    Parameters
+    ----------
+    fred_api_key : str, optional
+        FRED API key for proxy calculation fallback
 
     Returns
     -------
@@ -165,10 +170,10 @@ def fetch_dealer_leverage() -> Optional[pd.DataFrame]:
 
     # Method 3: Proxy using H.15 data (if primary dealer not available)
     logger.warning("Primary Dealer data unavailable, using proxy...")
-    return _fetch_dealer_leverage_proxy()
+    return _fetch_dealer_leverage_proxy(fred_api_key=fred_api_key)
 
 
-def _fetch_dealer_leverage_proxy() -> Optional[pd.DataFrame]:
+def _fetch_dealer_leverage_proxy(fred_api_key: Optional[str] = None) -> Optional[pd.DataFrame]:
     """
     Proxy for dealer leverage using Fed H.15 broker-dealer data.
 
@@ -177,7 +182,7 @@ def _fetch_dealer_leverage_proxy() -> Optional[pd.DataFrame]:
     try:
         from .fred_client import FREDClient
 
-        fred = FREDClient()
+        fred = FREDClient(api_key=fred_api_key)
 
         # Try fetching dealer-related series
         # DPSACBW027SBOG: Broker-dealer credit

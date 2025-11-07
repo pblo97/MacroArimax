@@ -44,13 +44,18 @@ warnings.filterwarnings('ignore')
 # ============================================================================
 
 @retry_with_backoff(max_retries=5, base_delay=2.0)
-def fetch_ecb_fx_basis() -> Optional[pd.DataFrame]:
+def fetch_ecb_fx_basis(fred_api_key: Optional[str] = None) -> Optional[pd.DataFrame]:
     """
     Fetch EUR/USD cross-currency basis swap from ECB.
 
     Source: ECB Statistical Data Warehouse
     Frequency: Daily
     Data: 3M EUR/USD basis swap spread
+
+    Parameters
+    ----------
+    fred_api_key : str, optional
+        FRED API key for proxy calculation fallback
 
     Returns
     -------
@@ -121,10 +126,10 @@ def fetch_ecb_fx_basis() -> Optional[pd.DataFrame]:
 
     # Fallback: Calculate proxy from interest rate parity
     logger.warning("ECB direct data unavailable, computing proxy...")
-    return _compute_fx_basis_proxy()
+    return _compute_fx_basis_proxy(fred_api_key=fred_api_key)
 
 
-def _compute_fx_basis_proxy() -> Optional[pd.DataFrame]:
+def _compute_fx_basis_proxy(fred_api_key: Optional[str] = None) -> Optional[pd.DataFrame]:
     """
     Compute FX basis proxy from interest rate parity.
 
@@ -138,7 +143,7 @@ def _compute_fx_basis_proxy() -> Optional[pd.DataFrame]:
     try:
         from .fred_client import FREDClient
 
-        fred = FREDClient()
+        fred = FREDClient(api_key=fred_api_key)
 
         # Fetch spot EUR/USD
         spot_eur_usd = fred.fetch_series('DEXUSEU')  # Daily EUR/USD spot
@@ -399,13 +404,18 @@ def fetch_bis_credit_gaps() -> Optional[pd.DataFrame]:
 # ============================================================================
 
 @retry_with_backoff(max_retries=5, base_delay=2.0)
-def fetch_ici_mmf_flows() -> Optional[pd.DataFrame]:
+def fetch_ici_mmf_flows(fred_api_key: Optional[str] = None) -> Optional[pd.DataFrame]:
     """
     Fetch Money Market Fund flows from ICI.
 
     Source: ICI - Investment Company Institute
     Frequency: Weekly
     Data: Total assets, net flows (inflows - outflows)
+
+    Parameters
+    ----------
+    fred_api_key : str, optional
+        FRED API key for proxy calculation fallback
 
     Returns
     -------
@@ -488,15 +498,15 @@ def fetch_ici_mmf_flows() -> Optional[pd.DataFrame]:
 
     # Fallback: Use FRED MMF assets
     logger.warning("ICI data unavailable, using FRED proxy...")
-    return _fetch_mmf_proxy()
+    return _fetch_mmf_proxy(fred_api_key=fred_api_key)
 
 
-def _fetch_mmf_proxy() -> Optional[pd.DataFrame]:
+def _fetch_mmf_proxy(fred_api_key: Optional[str] = None) -> Optional[pd.DataFrame]:
     """Proxy MMF flows from FRED data."""
     try:
         from .fred_client import FREDClient
 
-        fred = FREDClient()
+        fred = FREDClient(api_key=fred_api_key)
 
         # MMF total financial assets
         mmf_assets = fred.fetch_series('MMMFFAQ027S')
@@ -521,7 +531,7 @@ def _fetch_mmf_proxy() -> Optional[pd.DataFrame]:
 # CALCULATED PROXIES
 # ============================================================================
 
-def compute_variance_risk_premium() -> Optional[pd.DataFrame]:
+def compute_variance_risk_premium(fred_api_key: Optional[str] = None) -> Optional[pd.DataFrame]:
     """
     Compute Variance Risk Premium (VRP).
 
@@ -535,7 +545,7 @@ def compute_variance_risk_premium() -> Optional[pd.DataFrame]:
     try:
         from .fred_client import FREDClient
 
-        fred = FREDClient()
+        fred = FREDClient(api_key=fred_api_key)
 
         # Fetch VIX
         vix = fred.fetch_series('VIX')
@@ -574,7 +584,7 @@ def compute_variance_risk_premium() -> Optional[pd.DataFrame]:
         return None
 
 
-def compute_convenience_yield() -> Optional[pd.DataFrame]:
+def compute_convenience_yield(fred_api_key: Optional[str] = None) -> Optional[pd.DataFrame]:
     """
     Compute convenience yield on Treasuries.
 
@@ -587,7 +597,7 @@ def compute_convenience_yield() -> Optional[pd.DataFrame]:
     try:
         from .fred_client import FREDClient
 
-        fred = FREDClient()
+        fred = FREDClient(api_key=fred_api_key)
 
         # Fetch T-Bill 3M
         tb3m = fred.fetch_series('TB3MS')
