@@ -1,275 +1,288 @@
-# series_map.yaml
-# Configuración de series FRED para el sistema de liquidez
-
-# ==========================
-# Core Plumbing Indicators
-# ==========================
 core_plumbing:
   SOFR:
-    code: "SOFR"
-    description: "Secured Overnight Financing Rate"
-    transform: "level"
+    code: SOFR
+    description: Secured Overnight Financing Rate
+    transform: level
     winsorize: true
-    category: "rates"
-
+    category: rates
   EFFR:
-    code: "EFFR"
-    description: "Effective Federal Funds Rate"
-    transform: "level"
+    code: EFFR
+    description: Effective Federal Funds Rate
+    transform: level
     winsorize: true
-    category: "rates"
-
+    category: rates
   OBFR:
-    code: "OBFR"
-    description: "Overnight Bank Funding Rate"
-    transform: "level"
+    code: OBFR
+    description: Overnight Bank Funding Rate
+    transform: level
     winsorize: true
-    category: "rates"
-
+    category: rates
   TGCR:
-    code: "TGCR"
-    description: "Tri-Party General Collateral Rate"
-    transform: "level"
+    code: TGCR
+    description: Tri-Party General Collateral Rate
+    transform: level
     winsorize: true
-    category: "rates"
-
-  # RRP & Fed Balance Sheet
+    category: rates
   RRP:
-    code: "RRPONTSYD"
-    description: "Overnight Reverse Repo (ON RRP)"
-    transform: "level"
+    code: RRPONTSYD
+    description: Overnight Reverse Repo (ON RRP)
+    transform: level
     winsorize: true
-    category: "fed_balance_sheet"
-
+    category: fed_balance_sheet
   TGA:
-    code: "WTREGEN"
-    description: "Treasury General Account"
-    transform: "level"
+    code: WTREGEN
+    description: Treasury General Account
+    transform: level
     winsorize: true
-    category: "fed_balance_sheet"
-
+    category: fed_balance_sheet
   RESERVES:
-    code: "TOTRESNS"
-    description: "Total Reserves of Depository Institutions"
-    transform: "level"
+    code: TOTRESNS
+    description: Total Reserves of Depository Institutions
+    transform: level
     winsorize: true
-    category: "fed_balance_sheet"
-
+    category: fed_balance_sheet
   BANK_RESERVES_WEEKLY:
-    code: "WRESBAL"
-    description: "Reserve Balances with Federal Reserve Banks (Weekly H.4.1)"
-    transform: "level"
+    code: WRESBAL
+    description: Reserve Balances with Federal Reserve Banks (Weekly H.4.1)
+    transform: level
     winsorize: true
-    category: "fed_balance_sheet"
-
+    category: fed_balance_sheet
   FHLB_ADVANCES:
-    code: "FHLBADVANCES"
-    description: "FHLB Advances Outstanding"
-    transform: "level"
+    code: FHLBADVANCES
+    description: FHLB Advances Outstanding
+    transform: level
     winsorize: true
-    category: "banking"
+    category: banking
     optional: true
-
   WALCL:
-    code: "WALCL"
-    description: "Fed Assets: Total Assets"
-    transform: "level"
+    code: WALCL
+    description: 'Fed Assets: Total Assets'
+    transform: level
     winsorize: true
-    category: "fed_balance_sheet"
-
-# ==========================
-# Stress Indicators
-# ==========================
+    category: fed_balance_sheet
+  DISCOUNT_WINDOW:
+    code: WLODLL
+    description: Federal Reserve Discount Window Borrowing
+    transform: level
+    winsorize: true
+    category: fed_facilities
+  PRIMARY_CREDIT:
+    code: H41RESPPALDKNWW
+    description: Primary Credit Outstanding (Discount Window)
+    transform: level
+    winsorize: true
+    category: fed_facilities
 stress_indicators:
   NFCI:
-    code: "NFCI"
-    description: "Chicago Fed National Financial Conditions Index"
-    transform: "level"
+    code: NFCI
+    description: Chicago Fed National Financial Conditions Index
+    transform: level
     winsorize: true
-    category: "stress"
-
+    category: stress
   STLFSI4:
-    code: "STLFSI4"
-    description: "St. Louis Fed Financial Stress Index"
-    transform: "level"
+    code: STLFSI4
+    description: St. Louis Fed Financial Stress Index
+    transform: level
     winsorize: true
-    category: "stress"
-
+    category: stress
   HY_OAS:
-    code: "BAMLH0A0HYM2"
-    description: "ICE BofA US High Yield OAS"
-    transform: "level"
+    code: BAMLH0A0HYM2
+    description: ICE BofA US High Yield OAS
+    transform: level
     winsorize: true
-    category: "credit"
-
+    category: credit
   T10Y2Y:
-    code: "T10Y2Y"
-    description: "10-Year Treasury Constant Maturity Minus 2-Year"
-    transform: "level"
+    code: T10Y2Y
+    description: 10-Year Treasury Constant Maturity Minus 2-Year
+    transform: level
     winsorize: true
-    category: "term_structure"
-
+    category: term_structure
   VIX:
-    code: "VIXCLS"
-    description: "CBOE Volatility Index"
-    transform: "level"
+    code: VIXCLS
+    description: CBOE Volatility Index
+    transform: level
     winsorize: true
-    category: "volatility"
-
-# ==========================
-# Reference Rates
-# ==========================
+    category: volatility
+  CP_FINANCIAL_3M:
+    code: DCPF3M
+    description: 3-Month AA Financial Commercial Paper Rate
+    transform: level
+    winsorize: false
+    category: money_markets
+  CP_NONFINANCIAL_3M:
+    code: DCPN3M
+    description: 3-Month AA Nonfinancial Commercial Paper Rate
+    transform: level
+    winsorize: false
+    category: money_markets
 reference_rates:
   TB3MS:
-    code: "TB3MS"
-    description: "3-Month Treasury Bill Secondary Market Rate"
-    transform: "level"
+    code: TB3MS
+    description: 3-Month Treasury Bill Secondary Market Rate
+    transform: level
     winsorize: false
-    category: "risk_free"
-
+    category: risk_free
   DGS3MO:
-    code: "DGS3MO"
-    description: "3-Month Treasury Constant Maturity Rate"
-    transform: "level"
+    code: DGS3MO
+    description: 3-Month Treasury Constant Maturity Rate
+    transform: level
     winsorize: false
-    category: "risk_free"
-
+    category: risk_free
   DGS10:
-    code: "DGS10"
-    description: "10-Year Treasury Constant Maturity Rate"
-    transform: "level"
+    code: DGS10
+    description: 10-Year Treasury Constant Maturity Rate
+    transform: level
     winsorize: false
-    category: "risk_free"
-
-# ==========================
-# Market Indicators
-# ==========================
+    category: risk_free
+  BGCR:
+    code: BGCR
+    description: Broad General Collateral Rate
+    transform: level
+    winsorize: false
+    category: repo
+  SOFR_30D_AVG:
+    code: SOFR30DAYAVG
+    description: 30-Day Average SOFR
+    transform: level
+    winsorize: false
+    category: repo
+  SOFR_90D_AVG:
+    code: SOFR90DAYAVG
+    description: 90-Day Average SOFR
+    transform: level
+    winsorize: false
+    category: repo
 market_indicators:
   SP500:
-    code: "SP500"
-    description: "S&P 500 Index"
-    transform: "level"
+    code: SP500
+    description: S&P 500 Index
+    transform: level
     winsorize: false
-    category: "equity"
-
+    category: equity
   MOVE:
-    code: "MOVE"
-    description: "ICE BofA MOVE Index (Bond Volatility)"
-    transform: "level"
+    code: MOVE
+    description: ICE BofA MOVE Index (Bond Volatility)
+    transform: level
     winsorize: true
-    category: "volatility"
-    optional: true  # May not always be available
-
-  # FX Rates (for Phase 2 proxies)
+    category: volatility
+    optional: true
   DEXUSEU:
-    code: "DEXUSEU"
-    description: "U.S. / Euro Foreign Exchange Rate (daily)"
-    transform: "level"
+    code: DEXUSEU
+    description: U.S. / Euro Foreign Exchange Rate (daily)
+    transform: level
     winsorize: false
-    category: "fx"
+    category: fx
     optional: true
-
   EUR3MTD156N:
-    code: "EUR3MTD156N"
-    description: "3-Month Euro Interbank Offered Rate (EURIBOR)"
-    transform: "level"
+    code: EUR3MTD156N
+    description: 3-Month Euro Interbank Offered Rate (EURIBOR)
+    transform: level
     winsorize: false
-    category: "rates"
+    category: rates
     optional: true
-
-  # MMF Data (for Phase 2 proxies)
   MMMFFAQ027S:
-    code: "MMMFFAQ027S"
-    description: "Money Market Funds; Total Financial Assets, Level"
-    transform: "level"
+    code: MMMFFAQ027S
+    description: Money Market Funds; Total Financial Assets, Level
+    transform: level
     winsorize: false
-    category: "money_markets"
+    category: money_markets
     optional: true
-
-# ==========================
-# Derived Features Configuration
-# ==========================
+  CORP_AAA_OAS:
+    code: BAMLC0A0CM
+    description: ICE BofA AAA US Corporate OAS
+    transform: level
+    winsorize: true
+    category: credit
+  CORP_BBB_OAS:
+    code: BAMLC0A4CBBB
+    description: ICE BofA BBB US Corporate OAS
+    transform: level
+    winsorize: true
+    category: credit
+  DOLLAR_INDEX:
+    code: DTWEXBGS
+    description: 'Trade Weighted U.S. Dollar Index: Broad'
+    transform: level
+    winsorize: false
+    category: fx
 derived_features:
-  # Spreads
   sofr_effr_spread:
-    formula: "SOFR - EFFR"
-    description: "SOFR-EFFR spread (collateral premium)"
-
+    formula: SOFR - EFFR
+    description: SOFR-EFFR spread (collateral premium)
   obfr_sofr_spread:
-    formula: "OBFR - SOFR"
-    description: "OBFR-SOFR spread"
-
+    formula: OBFR - SOFR
+    description: OBFR-SOFR spread
   tgcr_sofr_spread:
-    formula: "TGCR - SOFR"
-    description: "TGCR-SOFR spread"
-
-  # Net Liquidity
+    formula: TGCR - SOFR
+    description: TGCR-SOFR spread
   net_liquidity:
-    formula: "RESERVES - TGA - RRP"
-    description: "Net Liquidity (Yardeni-style)"
-
-  # Changes (for diff transforms)
+    formula: RESERVES - TGA - RRP
+    description: Net Liquidity (Yardeni-style)
   delta_rrp:
-    formula: "diff(RRP)"
-    description: "Daily change in ON RRP"
-
+    formula: diff(RRP)
+    description: Daily change in ON RRP
   delta_tga:
-    formula: "diff(TGA)"
-    description: "Daily change in TGA"
-
+    formula: diff(TGA)
+    description: Daily change in TGA
   delta_reserves:
-    formula: "diff(RESERVES)"
-    description: "Daily change in Reserves"
-
+    formula: diff(RESERVES)
+    description: Daily change in Reserves
   delta_net_liquidity:
-    formula: "diff(net_liquidity)"
-    description: "Daily change in Net Liquidity"
-
+    formula: diff(net_liquidity)
+    description: Daily change in Net Liquidity
   delta_tgcr:
-    formula: "diff(TGCR)"
-    description: "Daily change in TGCR"
-
+    formula: diff(TGCR)
+    description: Daily change in TGCR
   delta_fhlb:
-    formula: "diff(FHLB_ADVANCES)"
-    description: "Daily change in FHLB Advances"
-
+    formula: diff(FHLB_ADVANCES)
+    description: Daily change in FHLB Advances
   delta_hy_oas:
-    formula: "diff(HY_OAS)"
-    description: "Daily change in HY OAS"
-
-# ==========================
-# Calendar & Event Flags
-# ==========================
+    formula: diff(HY_OAS)
+    description: Daily change in HY OAS
+  cp_tbill_spread:
+    formula: CP_FINANCIAL_3M - TB3MS
+    description: Commercial Paper - T-Bill spread (funding stress)
+  cp_nonfinancial_spread:
+    formula: CP_NONFINANCIAL_3M - TB3MS
+    description: Nonfinancial CP - T-Bill spread
+  discount_window_alarm:
+    formula: DISCOUNT_WINDOW > 5000
+    description: Discount Window usage alarm (>$5B = crisis)
+  bgcr_sofr_spread:
+    formula: BGCR - SOFR
+    description: BGCR-SOFR spread (collateral scarcity)
+  sofr_term_premium:
+    formula: SOFR_90D_AVG - SOFR
+    description: SOFR term premium (90-day vs overnight)
+  bbb_aaa_spread:
+    formula: CORP_BBB_OAS - CORP_AAA_OAS
+    description: BBB-AAA spread (credit stress)
+  dollar_strength_zscore:
+    formula: zscore(DOLLAR_INDEX, window=252)
+    description: Dollar strength z-score (USD shortage indicator)
 calendar_events:
   month_end:
-    description: "Last business day of month"
-    type: "boolean"
-
+    description: Last business day of month
+    type: boolean
   quarter_end:
-    description: "Last business day of quarter"
-    type: "boolean"
-
+    description: Last business day of quarter
+    type: boolean
   year_end:
-    description: "Last business day of year"
-    type: "boolean"
-
+    description: Last business day of year
+    type: boolean
   fomc_week:
-    description: "Week containing FOMC announcement"
-    type: "boolean"
+    description: Week containing FOMC announcement
+    type: boolean
     optional: true
-
-# ==========================
-# Processing Configuration
-# ==========================
 processing:
-  default_start_date: "2010-01-01"
-  cache_directory: ".fred_cache"
+  default_start_date: '2010-01-01'
+  cache_directory: .fred_cache
   cache_days: 30
   winsorize_percentile: 0.01
   resample_frequencies:
-    - "D"  # Daily
-    - "W"  # Weekly
-    - "M"  # Monthly
+  - D
+  - W
+  - M
   rolling_windows:
     weekly: 52
     monthly: 36

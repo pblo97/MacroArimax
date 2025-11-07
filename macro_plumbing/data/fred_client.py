@@ -226,7 +226,7 @@ class FREDClient:
         """
         df = df.copy()
 
-        # Spreads
+        # === ORIGINAL SPREADS ===
         if "SOFR" in df.columns and "EFFR" in df.columns:
             df["sofr_effr_spread"] = df["SOFR"] - df["EFFR"]
 
@@ -236,16 +236,42 @@ class FREDClient:
         if "TGCR" in df.columns and "SOFR" in df.columns:
             df["tgcr_sofr_spread"] = df["TGCR"] - df["SOFR"]
 
-        # Net Liquidity
+        # === TIER 1: COMMERCIAL PAPER SPREADS ===
+        if "CP_FINANCIAL_3M" in df.columns and "TB3MS" in df.columns:
+            df["cp_tbill_spread"] = df["CP_FINANCIAL_3M"] - df["TB3MS"]
+
+        if "CP_NONFINANCIAL_3M" in df.columns and "TB3MS" in df.columns:
+            df["cp_nonfinancial_spread"] = df["CP_NONFINANCIAL_3M"] - df["TB3MS"]
+
+        # === TIER 1: DISCOUNT WINDOW ALARM ===
+        if "DISCOUNT_WINDOW" in df.columns:
+            df["discount_window_alarm"] = (df["DISCOUNT_WINDOW"] > 5000).astype(int)
+
+        # === TIER 1: REPO SPREADS ===
+        if "BGCR" in df.columns and "SOFR" in df.columns:
+            df["bgcr_sofr_spread"] = df["BGCR"] - df["SOFR"]
+
+        if "SOFR_90D_AVG" in df.columns and "SOFR" in df.columns:
+            df["sofr_term_premium"] = df["SOFR_90D_AVG"] - df["SOFR"]
+
+        # === TIER 1: CREDIT SPREADS ===
+        if "CORP_BBB_OAS" in df.columns and "CORP_AAA_OAS" in df.columns:
+            df["bbb_aaa_spread"] = df["CORP_BBB_OAS"] - df["CORP_AAA_OAS"]
+
+        # === TIER 1: DOLLAR STRENGTH ===
+        if "DOLLAR_INDEX" in df.columns:
+            df["dollar_strength_zscore"] = zscore_rolling(df["DOLLAR_INDEX"], window=252)
+
+        # === NET LIQUIDITY ===
         if all(col in df.columns for col in ["RESERVES", "TGA", "RRP"]):
             df["net_liquidity"] = df["RESERVES"] - df["TGA"] - df["RRP"]
 
-        # Deltas
+        # === DELTAS ===
         for col in ["RRP", "TGA", "RESERVES", "net_liquidity"]:
             if col in df.columns:
                 df[f"delta_{col.lower()}"] = df[col].diff()
 
-        # Calendar flags
+        # === CALENDAR FLAGS ===
         df["month_end"] = df.index.is_month_end
         df["quarter_end"] = df.index.is_quarter_end
         df["year_end"] = (df.index.month == 12) & (df.index.day == 31)
@@ -279,6 +305,37 @@ def winsorize(s: pd.Series, p: float = 0.01) -> pd.Series:
         return s
     lo, hi = s.quantile(p), s.quantile(1 - p)
     return s.clip(lo, hi)
+
+
+def zscore_rolling(s: pd.Series, window: int = 252) -> pd.Series:
+    """
+    Compute rolling z-score for a series.
+
+    Parameters
+    ----------
+    s : pd.Series
+        Input series
+    window : int
+        Rolling window size (default: 252 = 1 year of trading days)
+
+    Returns
+    -------
+    pd.Series
+        Rolling z-score of series
+    """
+    if s.dropna().empty or len(s) < window:
+        return pd.Series(0, index=s.index, name=f"{s.name}_zscore")
+
+    rolling_mean = s.rolling(window=window, min_periods=window//2).mean()
+    rolling_std = s.rolling(window=window, min_periods=window//2).std()
+
+    # Avoid division by zero
+    rolling_std = rolling_std.replace(0, 1)
+
+    zscore = (s - rolling_mean) / rolling_std
+    zscore.name = f"{s.name}_zscore"
+
+    return zscore
 
 
 # Example usage
