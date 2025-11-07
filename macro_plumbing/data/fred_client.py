@@ -312,6 +312,52 @@ class FREDClient:
         if "JOBLESS_CLAIMS" in df.columns:
             df["jobless_claims_zscore"] = zscore_rolling(df["JOBLESS_CLAIMS"], window=52)
 
+        # === TIER 3: SAFE HAVEN & VOLATILITY ===
+        if "GOLD_PRICE" in df.columns:
+            df["gold_zscore"] = zscore_rolling(df["GOLD_PRICE"], window=252)
+
+        if "WTI_OIL" in df.columns:
+            df["oil_zscore"] = zscore_rolling(df["WTI_OIL"], window=252)
+
+        if "VIX" in df.columns:
+            df["vix_alarm"] = (df["VIX"] > 30).astype(int)
+
+        # === TIER 3: INTERNATIONAL SPREADS ===
+        if "EURIBOR_3M" in df.columns and "SOFR" in df.columns:
+            df["euribor_ois_proxy"] = df["EURIBOR_3M"] - df["SOFR"]
+
+        if "DGS10" in df.columns and "JAPAN_10Y" in df.columns:
+            df["us_japan_spread"] = df["DGS10"] - df["JAPAN_10Y"]
+
+        # === TIER 3: LABOR MARKET DETAIL ===
+        if "CONTINUED_CLAIMS" in df.columns:
+            df["continued_claims_zscore"] = zscore_rolling(df["CONTINUED_CLAIMS"], window=52)
+
+        if all(col in df.columns for col in ["UNEMPLOYMENT_RATE", "PART_TIME_ECONOMIC", "LABOR_PARTICIPATION"]):
+            # U-6 style underemployment proxy
+            df["labor_slack"] = df["UNEMPLOYMENT_RATE"] + (df["PART_TIME_ECONOMIC"] / df["LABOR_PARTICIPATION"] * 100)
+
+        # === TIER 3: HOUSING MARKET ===
+        if "MORTGAGE_30Y" in df.columns and "DGS10" in df.columns:
+            df["mortgage_spread"] = df["MORTGAGE_30Y"] - df["DGS10"]
+
+        if "HOUSING_STARTS" in df.columns:
+            df["housing_momentum"] = df["HOUSING_STARTS"].diff()
+
+        # === TIER 3: CONSUMER CREDIT ===
+        if "CONSUMER_CREDIT" in df.columns:
+            df["consumer_credit_growth"] = df["CONSUMER_CREDIT"].pct_change(periods=12) * 100  # YoY %
+
+        if "CREDIT_CARD_DELINQ" in df.columns and "AUTO_LOAN_DELINQ" in df.columns:
+            df["delinquency_index"] = (df["CREDIT_CARD_DELINQ"] + df["AUTO_LOAN_DELINQ"]) / 2
+
+        # === TIER 3: REAL ECONOMY ===
+        if "RETAIL_SALES" in df.columns:
+            df["retail_sales_momentum"] = df["RETAIL_SALES"].pct_change(periods=3) * 100  # 3-month %
+
+        if "CAPACITY_UTILIZATION" in df.columns:
+            df["capacity_gap"] = 85 - df["CAPACITY_UTILIZATION"]  # Slack (85% baseline)
+
         # === CALENDAR FLAGS ===
         df["month_end"] = df.index.is_month_end
         df["quarter_end"] = df.index.is_quarter_end
