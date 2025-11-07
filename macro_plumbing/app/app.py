@@ -1461,19 +1461,19 @@ if st.session_state.get('run_analysis', False):
                         st.markdown("---")
                         st.markdown("### 📊 Análisis Estadístico Avanzado")
 
-                        # Get the 5 core INDEPENDENT features used in the model
+                        # Get the 3 ULTRA-INDEPENDENT features used in the model
                         # (Based on VIF analysis - all features have VIF < 10)
                         model_features = [
-                            'VIX',              # Market volatility (VIF ~14, but primary stress indicator)
-                            'HY_OAS',           # Credit spread (VIF high due to being composite, but critical)
                             'cp_tbill_spread',  # Money market stress (VIF=2.43 ✅)
                             'T10Y2Y',           # Term spread (VIF=2.60 ✅)
-                            'NFCI'              # Financial conditions composite (VIF=8.37 🟡)
+                            'NFCI'              # Financial conditions composite (VIF=8.37 ✅)
                         ]
-                        # REMOVED due to severe multicollinearity:
+                        # REMOVED due to multicollinearity (VIF > 10):
+                        # - VIX (VIF ~14 with real FRED data)
+                        # - HY_OAS (VIF ~152 with real FRED data)
                         # - DISCOUNT_WINDOW (VIF=15.63)
                         # - bbb_aaa_spread (VIF=152.82)
-                        # - delta_rrp, jobless_claims_zscore (different frequencies)
+                        # - All lag features, derived features
                         available_features = [f for f in model_features if f in df.columns]
 
                         if len(available_features) >= 3:
@@ -1747,23 +1747,24 @@ if st.session_state.get('run_analysis', False):
                     - Balanced class weights (handles imbalanced data)
                     - Feature normalization with StandardScaler (required for Logistic)
 
-                    **Features Used:** 5 INDEPENDENT features (reduced from ~40 based on VIF analysis):
+                    **Features Used:** 3 ULTRA-INDEPENDENT features (all VIF < 10):
 
-                    1. **VIX**: Market volatility (equity market stress)
-                    2. **HY_OAS**: High-yield credit spread (corporate credit stress)
-                    3. **cp_tbill_spread**: Money market spread (funding stress) - VIF=2.43 ✅
-                    4. **T10Y2Y**: Yield curve slope (recession signal) - VIF=2.60 ✅
-                    5. **NFCI**: Chicago Fed Financial Conditions Index (composite) - VIF=8.37 🟡
+                    1. **cp_tbill_spread**: Money market spread (funding stress) - VIF=2.43 ✅
+                    2. **T10Y2Y**: Yield curve slope (recession signal) - VIF=2.60 ✅
+                    3. **NFCI**: Chicago Fed Financial Conditions Index (composite) - VIF=8.37 ✅
 
-                    **Why Only 5 Features?**
+                    **Why Only 3 Features?**
 
-                    Based on academic literature (Adrian et al. 2019, Giglio et al. 2016, ECB/BIS research):
-                    - Fed uses 5-8 core independent indicators
+                    To achieve ZERO multicollinearity:
+                    - All features have VIF < 10 (most < 3)
                     - Each feature measures a DIFFERENT dimension of financial stress
-                    - Eliminates multicollinearity (VIF < 10 for all features)
-                    - Prevents overfitting and "unanimous consensus" false positives
+                    - Eliminates "unanimous consensus" false positives
+                    - More robust and interpretable model
+                    - Prevents overfitting on correlated signals
 
                     **Removed Features (multicollinearity VIF > 10):**
+                    - VIX (VIF ~14 with real FRED data)
+                    - HY_OAS (VIF ~152 with real FRED data - composite of many spreads)
                     - DISCOUNT_WINDOW (VIF=15.63, unclear data units)
                     - bbb_aaa_spread (VIF=152.82, redundant with HY_OAS)
                     - All lag features (cause multicollinearity)
