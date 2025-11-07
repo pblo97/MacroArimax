@@ -303,6 +303,14 @@ class CrisisPredictor:
         if not self.is_trained:
             raise ValueError("Model not trained. Call train() first.")
 
+        # Make a copy to avoid modifying original
+        df = df.copy()
+
+        # Prepare features (creates lag/volatility columns if they don't exist)
+        # This is necessary because prepare_features() modifies df in-place
+        _ = self.prepare_features(df)
+
+        # Now extract features
         X = df[self.features]
         proba = self.model.predict_proba(X)[:, 1]
 
