@@ -143,12 +143,11 @@ if st.session_state.get('run_analysis', False):
                 if start_date and df is not None:
                     df = df[df.index >= pd.to_datetime(start_date)]
 
-                # Ensure derived features are computed (safety check)
-                # This handles cases where quick_fetch() didn't compute them
-                if "sofr_effr_spread" not in df.columns:
-                    from macro_plumbing.data.fred_client import FREDClient
-                    temp_client = FREDClient(api_key=fred_api_key)
-                    df = temp_client.compute_derived_features(df)
+                # ALWAYS recompute derived features to ensure Tier 1/2/3 features are present
+                # This includes: cp_tbill_spread, bbb_aaa_spread, credit_cascade, etc.
+                from macro_plumbing.data.fred_client import FREDClient
+                temp_client = FREDClient(api_key=fred_api_key)
+                df = temp_client.compute_derived_features(df)
 
                 # Check Phase 2 data availability
                 phase2_cols = [
