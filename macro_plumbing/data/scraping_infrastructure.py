@@ -395,13 +395,19 @@ class ParallelScraper:
                 name = future_to_name[future]
                 try:
                     result = future.result(timeout=120)
-                    results[name] = result
 
-                    # Cache result
-                    if use_cache and result is not None:
-                        cache.set(name, result)
+                    # Only mark as success if result is not None
+                    if result is not None:
+                        results[name] = result
 
-                    logger.info(f"✅ Successfully scraped: {name}")
+                        # Cache result
+                        if use_cache:
+                            cache.set(name, result)
+
+                        logger.info(f"✅ Successfully scraped: {name}")
+                    else:
+                        results[name] = None
+                        logger.warning(f"⚠️  {name} returned None (no data)")
 
                 except Exception as e:
                     logger.error(f"❌ Failed to scrape {name}: {e}")
