@@ -72,6 +72,24 @@ core_plumbing:
     transform: level
     winsorize: true
     category: fed_facilities
+  TOTAL_BANK_CREDIT:
+    code: TOTBKCR
+    description: Total Bank Credit, All Commercial Banks
+    transform: level
+    winsorize: true
+    category: banking
+  CI_LOANS:
+    code: BUSLOANS
+    description: Commercial and Industrial Loans, All Commercial Banks
+    transform: level
+    winsorize: true
+    category: banking
+  REAL_ESTATE_LOANS:
+    code: REALLN
+    description: Real Estate Loans, All Commercial Banks
+    transform: level
+    winsorize: true
+    category: banking
 stress_indicators:
   NFCI:
     code: NFCI
@@ -115,6 +133,24 @@ stress_indicators:
     transform: level
     winsorize: false
     category: money_markets
+  YIELD_30Y:
+    code: DGS30
+    description: 30-Year Treasury Constant Maturity Rate
+    transform: level
+    winsorize: false
+    category: term_structure
+  YIELD_5Y:
+    code: DGS5
+    description: 5-Year Treasury Constant Maturity Rate
+    transform: level
+    winsorize: false
+    category: term_structure
+  YIELD_2Y:
+    code: DGS2
+    description: 2-Year Treasury Constant Maturity Rate
+    transform: level
+    winsorize: false
+    category: term_structure
 reference_rates:
   TB3MS:
     code: TB3MS
@@ -152,6 +188,24 @@ reference_rates:
     transform: level
     winsorize: false
     category: repo
+  BREAKEVEN_5Y:
+    code: T5YIE
+    description: 5-Year Breakeven Inflation Rate
+    transform: level
+    winsorize: false
+    category: inflation
+  BREAKEVEN_10Y:
+    code: T10YIE
+    description: 10-Year Breakeven Inflation Rate
+    transform: level
+    winsorize: false
+    category: inflation
+  TIPS_10Y:
+    code: DFII10
+    description: 10-Year Treasury Inflation-Indexed Security Yield
+    transform: level
+    winsorize: false
+    category: inflation
 market_indicators:
   SP500:
     code: SP500
@@ -205,6 +259,24 @@ market_indicators:
     transform: level
     winsorize: false
     category: fx
+  INDUSTRIAL_PRODUCTION:
+    code: INDPRO
+    description: Industrial Production Index
+    transform: level
+    winsorize: false
+    category: real_economy
+  JOBLESS_CLAIMS:
+    code: ICSA
+    description: Initial Claims for Unemployment Insurance
+    transform: level
+    winsorize: true
+    category: labor
+  UNEMPLOYMENT_RATE:
+    code: UNRATE
+    description: Unemployment Rate
+    transform: level
+    winsorize: false
+    category: labor
 derived_features:
   sofr_effr_spread:
     formula: SOFR - EFFR
@@ -260,6 +332,42 @@ derived_features:
   dollar_strength_zscore:
     formula: zscore(DOLLAR_INDEX, window=252)
     description: Dollar strength z-score (USD shortage indicator)
+  bb_bbb_spread:
+    formula: CORP_BB_OAS - CORP_BBB_OAS
+    description: BB-BBB spread (high yield stress)
+  ccc_bb_spread:
+    formula: CORP_CCC_OAS - CORP_BB_OAS
+    description: CCC-BB spread (distressed debt indicator)
+  credit_cascade:
+    formula: CORP_CCC_OAS - CORP_AAA_OAS
+    description: CCC-AAA spread (full credit spectrum)
+  real_rate_5y:
+    formula: DGS5 - BREAKEVEN_5Y
+    description: 5-Year Real Interest Rate
+  real_rate_10y:
+    formula: DGS10 - BREAKEVEN_10Y
+    description: 10-Year Real Interest Rate
+  breakeven_slope:
+    formula: BREAKEVEN_10Y - BREAKEVEN_5Y
+    description: Breakeven inflation curve slope
+  term_spread_10y30y:
+    formula: YIELD_30Y - DGS10
+    description: 30Y-10Y term spread
+  term_spread_5y10y:
+    formula: DGS10 - YIELD_5Y
+    description: 10Y-5Y term spread
+  term_spread_2y5y:
+    formula: YIELD_5Y - YIELD_2Y
+    description: 5Y-2Y term spread
+  delta_bank_credit:
+    formula: diff(TOTAL_BANK_CREDIT)
+    description: Weekly change in total bank credit
+  delta_ci_loans:
+    formula: diff(CI_LOANS)
+    description: Weekly change in C&I loans
+  jobless_claims_zscore:
+    formula: zscore(JOBLESS_CLAIMS, window=52)
+    description: Jobless claims z-score (stress indicator)
 calendar_events:
   month_end:
     description: Last business day of month

@@ -271,6 +271,47 @@ class FREDClient:
             if col in df.columns:
                 df[f"delta_{col.lower()}"] = df[col].diff()
 
+        # === TIER 2: CREDIT CURVE SPREADS ===
+        if "CORP_BB_OAS" in df.columns and "CORP_BBB_OAS" in df.columns:
+            df["bb_bbb_spread"] = df["CORP_BB_OAS"] - df["CORP_BBB_OAS"]
+
+        if "CORP_CCC_OAS" in df.columns and "CORP_BB_OAS" in df.columns:
+            df["ccc_bb_spread"] = df["CORP_CCC_OAS"] - df["CORP_BB_OAS"]
+
+        if "CORP_CCC_OAS" in df.columns and "CORP_AAA_OAS" in df.columns:
+            df["credit_cascade"] = df["CORP_CCC_OAS"] - df["CORP_AAA_OAS"]
+
+        # === TIER 2: REAL RATES ===
+        if "YIELD_5Y" in df.columns and "BREAKEVEN_5Y" in df.columns:
+            df["real_rate_5y"] = df["YIELD_5Y"] - df["BREAKEVEN_5Y"]
+
+        if "DGS10" in df.columns and "BREAKEVEN_10Y" in df.columns:
+            df["real_rate_10y"] = df["DGS10"] - df["BREAKEVEN_10Y"]
+
+        if "BREAKEVEN_10Y" in df.columns and "BREAKEVEN_5Y" in df.columns:
+            df["breakeven_slope"] = df["BREAKEVEN_10Y"] - df["BREAKEVEN_5Y"]
+
+        # === TIER 2: TERM STRUCTURE ===
+        if "YIELD_30Y" in df.columns and "DGS10" in df.columns:
+            df["term_spread_10y30y"] = df["YIELD_30Y"] - df["DGS10"]
+
+        if "DGS10" in df.columns and "YIELD_5Y" in df.columns:
+            df["term_spread_5y10y"] = df["DGS10"] - df["YIELD_5Y"]
+
+        if "YIELD_5Y" in df.columns and "YIELD_2Y" in df.columns:
+            df["term_spread_2y5y"] = df["YIELD_5Y"] - df["YIELD_2Y"]
+
+        # === TIER 2: BANK CREDIT DELTAS ===
+        if "TOTAL_BANK_CREDIT" in df.columns:
+            df["delta_bank_credit"] = df["TOTAL_BANK_CREDIT"].diff()
+
+        if "CI_LOANS" in df.columns:
+            df["delta_ci_loans"] = df["CI_LOANS"].diff()
+
+        # === TIER 2: LABOR MARKET STRESS ===
+        if "JOBLESS_CLAIMS" in df.columns:
+            df["jobless_claims_zscore"] = zscore_rolling(df["JOBLESS_CLAIMS"], window=52)
+
         # === CALENDAR FLAGS ===
         df["month_end"] = df.index.is_month_end
         df["quarter_end"] = df.index.is_quarter_end
