@@ -126,11 +126,10 @@ class CrisisPredictor:
         """
         Prepare feature set for model.
 
-        Includes:
-        - Raw spreads and rates
-        - Lagged features (1-day, 3-day)
-        - Momentum (rate of change)
-        - Volatility (rolling std)
+        SIMPLIFIED to avoid multicollinearity:
+        - Only 9 independent core features
+        - Minimal lags (3 features)
+        - Single volatility feature
 
         Parameters
         ----------
@@ -142,80 +141,57 @@ class CrisisPredictor:
         list
             List of feature column names
         """
-        # Core features (spreads = leading indicators)
+        # SIMPLIFIED FEATURE SET (avoid multicollinearity)
+        # Using only INDEPENDENT features that measure different aspects
         core_features = []
 
-        # Spreads (MOST IMPORTANT)
-        spread_features = [
-            'cp_tbill_spread', 'bbb_aaa_spread', 'credit_cascade',
-            'sofr_effr_spread', 'bgcr_sofr_spread'
-        ]
-        core_features.extend([f for f in spread_features if f in df.columns])
+        # 1. Volatility (market fear)
+        if 'VIX' in df.columns:
+            core_features.append('VIX')
 
-        # Credit stress
-        credit_features = [
-            'HY_OAS', 'CORP_BBB_OAS', 'bb_bbb_spread',
-            'ccc_bb_spread', 'CORP_CCC_OAS'
-        ]
-        core_features.extend([f for f in credit_features if f in df.columns])
+        # 2. Credit stress (use ONLY HY_OAS, not multiple correlated credit spreads)
+        if 'HY_OAS' in df.columns:
+            core_features.append('HY_OAS')
 
-        # Volatility
-        vol_features = ['VIX', 'vix_alarm']
-        core_features.extend([f for f in vol_features if f in df.columns])
+        # 3. Money market stress (CP spread)
+        if 'cp_tbill_spread' in df.columns:
+            core_features.append('cp_tbill_spread')
 
-        # Money markets
-        mm_features = ['CP_FINANCIAL_3M', 'CP_NONFINANCIAL_3M']
-        core_features.extend([f for f in mm_features if f in df.columns])
+        # 4. Fed emergency lending (discount window)
+        if 'DISCOUNT_WINDOW' in df.columns:
+            core_features.append('DISCOUNT_WINDOW')
 
-        # Fed facilities (crisis indicator)
-        fed_features = ['DISCOUNT_WINDOW', 'discount_window_alarm']
-        core_features.extend([f for f in fed_features if f in df.columns])
+        # 5. Term structure (recession signal)
+        if 'T10Y2Y' in df.columns:
+            core_features.append('T10Y2Y')
 
-        # Repo markets
-        repo_features = ['SOFR', 'BGCR', 'sofr_term_premium']
-        core_features.extend([f for f in repo_features if f in df.columns])
+        # 6. Liquidity drain (RRP)
+        if 'delta_rrp' in df.columns:
+            core_features.append('delta_rrp')
 
-        # Term structure
-        term_features = ['T10Y2Y', 'term_spread_5y10y', 'term_spread_2y5y']
-        core_features.extend([f for f in term_features if f in df.columns])
+        # 7. Labor market stress
+        if 'jobless_claims_zscore' in df.columns:
+            core_features.append('jobless_claims_zscore')
 
-        # Liquidity
-        liq_features = ['delta_rrp', 'delta_tga', 'delta_reserves']
-        core_features.extend([f for f in liq_features if f in df.columns])
+        # 8. Composite stress index (NFCI already combines many indicators)
+        if 'NFCI' in df.columns:
+            core_features.append('NFCI')
 
-        # Real economy
-        econ_features = [
-            'jobless_claims_zscore', 'continued_claims_zscore',
-            'delinquency_index', 'labor_slack'
-        ]
-        core_features.extend([f for f in econ_features if f in df.columns])
+        # 9. BBB-AAA spread (one representative credit spread)
+        if 'bbb_aaa_spread' in df.columns:
+            core_features.append('bbb_aaa_spread')
 
-        # International
-        intl_features = ['us_japan_spread', 'DOLLAR_INDEX', 'euribor_ois_proxy']
-        core_features.extend([f for f in intl_features if f in df.columns])
-
-        # Bank credit
-        bank_features = ['delta_bank_credit', 'delta_ci_loans']
-        core_features.extend([f for f in bank_features if f in df.columns])
-
-        # Housing
-        housing_features = ['housing_momentum', 'mortgage_spread']
-        core_features.extend([f for f in housing_features if f in df.columns])
-
-        # Create lagged features (what happened yesterday/3 days ago matters)
-        lag_cols = ['VIX', 'cp_tbill_spread', 'HY_OAS', 'bbb_aaa_spread']
+        # Create lagged features (momentum) - only for top 3 indicators
+        lag_cols = ['VIX', 'cp_tbill_spread', 'HY_OAS']
         for col in lag_cols:
             if col in df.columns:
                 df[f'{col}_lag1'] = df[col].shift(1)
-                df[f'{col}_lag3'] = df[col].shift(3)
-                core_features.extend([f'{col}_lag1', f'{col}_lag3'])
+                core_features.append(f'{col}_lag1')
 
-        # Create volatility features (recent instability predicts crisis)
-        vol_cols = ['cp_tbill_spread', 'VIX', 'bbb_aaa_spread']
-        for col in vol_cols:
-            if col in df.columns:
-                df[f'{col}_volatility'] = df[col].rolling(10).std()
-                core_features.append(f'{col}_volatility')
+        # Create volatility features (recent instability) - only for VIX
+        if 'VIX' in df.columns:
+            df['VIX_volatility'] = df['VIX'].rolling(10).std()
+            core_features.append('VIX_volatility')
 
         return core_features
 
