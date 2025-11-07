@@ -1117,11 +1117,13 @@ if st.session_state.get('run_analysis', False):
         st.markdown("""
         Predicts probability of liquidity crisis in next **5 days** using Random Forest classifier.
 
-        **Crisis Definition:**
-        - VIX > 35 OR
-        - CP spread > 150bp OR
-        - HY OAS > 700bp OR
-        - Discount Window > $10B
+        **Crisis Definition (CALIBRATED to P95):**
+        - VIX > 30.47 OR
+        - CP spread > 0.44% OR
+        - HY OAS > 6.72% OR
+        - Discount Window > $3.94M
+
+        *(Thresholds calibrated to 95th percentile of historical data - see Calibración expander)*
         """)
 
         try:
@@ -1320,11 +1322,12 @@ if st.session_state.get('run_analysis', False):
                     """)
 
                     # Analyze each crisis indicator
+                    # Showing OLD thresholds vs CALIBRATED thresholds
                     indicators_config = {
-                        'VIX': {'threshold': 35, 'unit': 'index'},
-                        'cp_tbill_spread': {'threshold': 150, 'unit': 'bps'},
-                        'HY_OAS': {'threshold': 700, 'unit': 'bps'},
-                        'DISCOUNT_WINDOW': {'threshold': 10000, 'unit': 'M$'}
+                        'VIX': {'old_threshold': 35, 'new_threshold': 30.47, 'unit': 'index'},
+                        'cp_tbill_spread': {'old_threshold': 150, 'new_threshold': 0.44, 'unit': '% (was bps)'},
+                        'HY_OAS': {'old_threshold': 700, 'new_threshold': 6.72, 'unit': '% (was bps)'},
+                        'DISCOUNT_WINDOW': {'old_threshold': 10000, 'new_threshold': 3944055, 'unit': 'M$'}
                     }
 
                     calibration_results = []
@@ -1337,9 +1340,16 @@ if st.session_state.get('run_analysis', False):
                         if len(series) == 0:
                             continue
 
-                        threshold = config['threshold']
-                        days_above = (series > threshold).sum()
-                        pct_above = (days_above / len(series)) * 100
+                        old_threshold = config['old_threshold']
+                        new_threshold = config['new_threshold']
+
+                        # Check with OLD threshold (for comparison)
+                        days_above_old = (series > old_threshold).sum()
+                        pct_above_old = (days_above_old / len(series)) * 100
+
+                        # Check with NEW threshold (calibrated)
+                        days_above_new = (series > new_threshold).sum()
+                        pct_above_new = (days_above_new / len(series)) * 100
 
                         # Calculate percentiles
                         p50 = series.quantile(0.50)
@@ -1350,28 +1360,29 @@ if st.session_state.get('run_analysis', False):
 
                         current_val = series.iloc[-1]
 
-                        # Determine status
-                        if pct_above > 50:
+                        # Determine status based on NEW threshold
+                        if pct_above_new > 50:
                             status = "🔴 CRÍTICO"
-                            issue = f"{pct_above:.1f}% de días exceden umbral - marca mayoría como crisis!"
-                        elif pct_above > 20:
+                            issue = f"{pct_above_new:.1f}% de días exceden nuevo umbral"
+                        elif pct_above_new > 20:
                             status = "🟡 ADVERTENCIA"
-                            issue = f"{pct_above:.1f}% de días exceden umbral - demasiado alto"
-                        elif pct_above > 10:
+                            issue = f"{pct_above_new:.1f}% de días exceden nuevo umbral"
+                        elif pct_above_new > 10:
                             status = "🟢 OK (alto)"
-                            issue = f"{pct_above:.1f}% esperado para estrés"
+                            issue = f"{pct_above_new:.1f}% esperado para estrés"
                         else:
                             status = "✅ BUENO"
-                            issue = f"{pct_above:.1f}% representa eventos raros"
+                            issue = f"{pct_above_new:.1f}% representa eventos raros"
 
                         calibration_results.append({
                             'Indicador': indicator,
-                            'Umbral Actual': f"{threshold:,.0f} {config['unit']}",
+                            'Umbral Viejo': f"{old_threshold:,.0f}",
+                            'Umbral Nuevo (P95)': f"{new_threshold:,.2f}",
                             'Valor Actual': f"{current_val:,.2f}",
-                            '% Días > Umbral': f"{pct_above:.1f}%",
-                            'P95 (sugerido)': f"{p95:,.2f}",
+                            '% Días > Viejo': f"{pct_above_old:.1f}%",
+                            '% Días > Nuevo': f"{pct_above_new:.1f}%",
                             'Status': status,
-                            'Diagnóstico': issue
+                            'Unidad': config['unit']
                         })
 
                     if calibration_results:
@@ -1383,32 +1394,273 @@ if st.session_state.get('run_analysis', False):
 
                         st.markdown("""
                         **Interpretación:**
-                        - **% Días > Umbral**: Si es >20%, el umbral está muy bajo
-                        - **P95 (percentil 95)**: Umbral sugerido que marca ~5% de días como crisis
+                        - **Umbral Viejo**: Umbral original que causaba 99.9% falsos positivos
+                        - **Umbral Nuevo (P95)**: Umbral calibrado (percentil 95) - ya implementado en el modelo
+                        - **% Días > Viejo**: Porcentaje de días que excedían umbral viejo (100% = problema crítico)
+                        - **% Días > Nuevo**: Porcentaje de días que exceden umbral nuevo (~5% = correcto)
                         - **Status**:
                           - ✅ BUENO: <10% días exceden (eventos raros)
                           - 🟢 OK: 10-20% (estrés moderado)
                           - 🟡 ADVERTENCIA: 20-50% (umbral bajo)
                           - 🔴 CRÍTICO: >50% (umbral muy bajo, marca mayoría como crisis)
 
-                        **Umbrales Sugeridos (P95):**
+                        **Umbrales ACTUALES en el modelo (ya calibrados):**
                         """)
 
-                        # Generate calibrated code
-                        suggested_code = "crisis_conditions = (\n"
+                        # Generate calibrated code (already implemented)
+                        suggested_code = "# ESTOS UMBRALES YA ESTÁN IMPLEMENTADOS\ncrisis_conditions = (\n"
                         for result in calibration_results:
                             indicator = result['Indicador']
-                            p95_str = result['P95 (sugerido)']
-                            p95_val = float(p95_str.replace(',', ''))
-                            suggested_code += f"    (df['{indicator}'] > {p95_val:.2f}) |\n"
+                            new_threshold_str = result['Umbral Nuevo (P95)']
+                            new_threshold_val = float(new_threshold_str.replace(',', ''))
+                            suggested_code += f"    (df['{indicator}'] > {new_threshold_val:.2f}) |\n"
                         suggested_code = suggested_code.rstrip(' |\n') + "\n)"
 
                         st.code(suggested_code, language='python')
 
-                        st.info("""
-                        💡 **Recomendación**: Si ves 🔴 CRÍTICO o 🟡 ADVERTENCIA, actualiza los umbrales
-                        en `crisis_classifier.py` usando los valores P95 sugeridos arriba.
+                        st.success("""
+                        ✅ **Umbrales Calibrados**: Los umbrales ya están actualizados en `crisis_classifier.py`
+                        basándose en el percentil 95 (P95) de datos históricos.
+
+                        Si ves status ✅ BUENO en todos los indicadores, el modelo debe predecir ~5-20% de
+                        probabilidad de crisis en condiciones normales (no 99%).
+
+                        **Recarga la página o presiona "🔄 Retrain Model" para aplicar los nuevos umbrales.**
                         """)
+
+                        # === ADVANCED STATISTICAL ANALYSIS ===
+                        st.markdown("---")
+                        st.markdown("### 📊 Análisis Estadístico Avanzado")
+
+                        # Get the core features used in the model
+                        model_features = [
+                            'VIX', 'HY_OAS', 'cp_tbill_spread', 'DISCOUNT_WINDOW',
+                            'T10Y2Y', 'delta_rrp', 'jobless_claims_zscore', 'NFCI',
+                            'bbb_aaa_spread'
+                        ]
+                        available_features = [f for f in model_features if f in df.columns]
+
+                        if len(available_features) >= 3:
+                            df_features = df[available_features].dropna()
+
+                            # 1. CORRELATION MATRIX
+                            st.markdown("#### 1. Matriz de Correlación (Pearson r)")
+                            st.markdown("Detecta features que se mueven juntos (multicolinealidad)")
+
+                            corr_matrix = df_features.corr()
+
+                            # Create heatmap
+                            fig_corr = px.imshow(
+                                corr_matrix,
+                                labels=dict(x="Feature", y="Feature", color="Correlación"),
+                                x=corr_matrix.columns,
+                                y=corr_matrix.columns,
+                                color_continuous_scale='RdBu_r',
+                                zmin=-1, zmax=1,
+                                title="Correlación entre Features"
+                            )
+                            fig_corr.update_layout(height=600)
+                            st.plotly_chart(fig_corr, use_container_width=True)
+
+                            # Show high correlations
+                            st.markdown("**Correlaciones Altas (|r| > 0.7):**")
+                            high_corr = []
+                            for i in range(len(corr_matrix.columns)):
+                                for j in range(i+1, len(corr_matrix.columns)):
+                                    r_val = corr_matrix.iloc[i, j]
+                                    if abs(r_val) > 0.7:
+                                        high_corr.append({
+                                            'Feature 1': corr_matrix.columns[i],
+                                            'Feature 2': corr_matrix.columns[j],
+                                            'r (correlación)': f"{r_val:.3f}",
+                                            'Status': '⚠️ Alta' if abs(r_val) > 0.9 else '🟡 Moderada'
+                                        })
+
+                            if high_corr:
+                                st.dataframe(pd.DataFrame(high_corr), use_container_width=True, hide_index=True)
+                                st.caption("r > 0.9: Multicolinealidad severa | r > 0.7: Multicolinealidad moderada")
+                            else:
+                                st.success("✅ No se detectaron correlaciones altas entre features")
+
+                            # 2. VIF (Variance Inflation Factor)
+                            st.markdown("#### 2. VIF (Variance Inflation Factor)")
+                            st.markdown("Mide multicolinealidad. VIF > 10 indica problema, VIF > 5 es señal de alerta.")
+
+                            try:
+                                from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+                                # Calculate VIF for each feature
+                                vif_data = []
+                                df_features_clean = df_features.replace([np.inf, -np.inf], np.nan).dropna()
+
+                                if len(df_features_clean) > 0:
+                                    for i, col in enumerate(df_features_clean.columns):
+                                        try:
+                                            vif = variance_inflation_factor(df_features_clean.values, i)
+
+                                            if vif > 10:
+                                                status = "🔴 Severo"
+                                                interpretation = "Multicolinealidad severa - considerar remover"
+                                            elif vif > 5:
+                                                status = "🟡 Moderado"
+                                                interpretation = "Multicolinealidad moderada - revisar"
+                                            else:
+                                                status = "✅ Bueno"
+                                                interpretation = "Independiente"
+
+                                            vif_data.append({
+                                                'Feature': col,
+                                                'VIF': f"{vif:.2f}",
+                                                'Status': status,
+                                                'Interpretación': interpretation
+                                            })
+                                        except Exception as e:
+                                            vif_data.append({
+                                                'Feature': col,
+                                                'VIF': 'Error',
+                                                'Status': '⚠️',
+                                                'Interpretación': str(e)[:50]
+                                            })
+
+                                    st.dataframe(pd.DataFrame(vif_data), use_container_width=True, hide_index=True)
+                                else:
+                                    st.warning("No hay suficientes datos limpios para calcular VIF")
+
+                            except ImportError:
+                                st.info("📦 Instalar `statsmodels` para análisis VIF: `pip install statsmodels`")
+                            except Exception as e:
+                                st.error(f"Error calculando VIF: {str(e)}")
+
+                            # 3. DISTRIBUTION STATISTICS
+                            st.markdown("#### 3. Estadísticas de Distribución")
+                            st.markdown("Pruebas de normalidad y outliers")
+
+                            dist_stats = []
+                            for col in available_features:
+                                series = df[col].dropna()
+                                if len(series) > 0:
+                                    # Calculate statistics
+                                    mean_val = series.mean()
+                                    median_val = series.median()
+                                    std_val = series.std()
+                                    skew_val = series.skew()
+                                    kurt_val = series.kurtosis()
+
+                                    # Normality: skewness close to 0, kurtosis close to 0
+                                    if abs(skew_val) < 0.5 and abs(kurt_val) < 1:
+                                        normality = "✅ Normal"
+                                    elif abs(skew_val) < 1 and abs(kurt_val) < 3:
+                                        normality = "🟡 Semi-normal"
+                                    else:
+                                        normality = "⚠️ No normal"
+
+                                    dist_stats.append({
+                                        'Feature': col,
+                                        'Mean': f"{mean_val:.2f}",
+                                        'Median': f"{median_val:.2f}",
+                                        'Std Dev': f"{std_val:.2f}",
+                                        'Skewness': f"{skew_val:.2f}",
+                                        'Kurtosis': f"{kurt_val:.2f}",
+                                        'Normalidad': normality
+                                    })
+
+                            st.dataframe(pd.DataFrame(dist_stats), use_container_width=True, hide_index=True)
+                            st.caption("""
+                            **Skewness**: 0 = simétrico, >0 = cola derecha, <0 = cola izquierda
+                            **Kurtosis**: 0 = normal, >0 = colas pesadas (outliers), <0 = colas ligeras
+                            """)
+
+                            # 4. UNIT DETECTION
+                            st.markdown("#### 4. Detección de Unidades")
+                            st.markdown("Verifica si los datos están en las unidades esperadas")
+
+                            unit_checks = []
+
+                            # Check cp_tbill_spread (should be in %, not bps)
+                            if 'cp_tbill_spread' in df.columns:
+                                val = df['cp_tbill_spread'].iloc[-1]
+                                expected_range = "50-200 bps (0.50-2.00%)"
+                                if val < 10:  # Likely in % format
+                                    unit_checks.append({
+                                        'Feature': 'cp_tbill_spread',
+                                        'Valor Actual': f"{val:.4f}",
+                                        'Rango Esperado': expected_range,
+                                        'Unidad Detectada': '% (decimal)',
+                                        'Umbral Actual': '150 bps',
+                                        'Umbral Corregido': '1.50 (150 bps)',
+                                        'Status': '⚠️ Unidades incorrectas'
+                                    })
+                                else:
+                                    unit_checks.append({
+                                        'Feature': 'cp_tbill_spread',
+                                        'Valor Actual': f"{val:.2f}",
+                                        'Rango Esperado': expected_range,
+                                        'Unidad Detectada': 'bps',
+                                        'Umbral Actual': '150 bps',
+                                        'Umbral Corregido': '150',
+                                        'Status': '✅ Unidades correctas'
+                                    })
+
+                            # Check HY_OAS
+                            if 'HY_OAS' in df.columns:
+                                val = df['HY_OAS'].iloc[-1]
+                                expected_range = "300-1000 bps (3.00-10.00%)"
+                                if val < 50:  # Likely in % format
+                                    unit_checks.append({
+                                        'Feature': 'HY_OAS',
+                                        'Valor Actual': f"{val:.4f}",
+                                        'Rango Esperado': expected_range,
+                                        'Unidad Detectada': '% (decimal)',
+                                        'Umbral Actual': '700 bps',
+                                        'Umbral Corregido': '7.00 (700 bps)',
+                                        'Status': '⚠️ Unidades incorrectas'
+                                    })
+                                else:
+                                    unit_checks.append({
+                                        'Feature': 'HY_OAS',
+                                        'Valor Actual': f"{val:.2f}",
+                                        'Rango Esperado': expected_range,
+                                        'Unidad Detectada': 'bps',
+                                        'Umbral Actual': '700 bps',
+                                        'Umbral Corregido': '700',
+                                        'Status': '✅ Unidades correctas'
+                                    })
+
+                            # Check DISCOUNT_WINDOW
+                            if 'DISCOUNT_WINDOW' in df.columns:
+                                val = df['DISCOUNT_WINDOW'].iloc[-1]
+                                p95 = df['DISCOUNT_WINDOW'].quantile(0.95)
+                                if val > 1000000:  # Values in absolute millions
+                                    unit_checks.append({
+                                        'Feature': 'DISCOUNT_WINDOW',
+                                        'Valor Actual': f"{val:,.0f}",
+                                        'Rango Esperado': f"P95: {p95:,.0f}",
+                                        'Unidad Detectada': 'Millones $ (absoluto)',
+                                        'Umbral Actual': '10,000',
+                                        'Umbral Corregido': f"{p95:,.0f}",
+                                        'Status': '⚠️ Umbral muy bajo'
+                                    })
+                                else:
+                                    unit_checks.append({
+                                        'Feature': 'DISCOUNT_WINDOW',
+                                        'Valor Actual': f"{val:,.0f}",
+                                        'Rango Esperado': f"P95: {p95:,.0f}",
+                                        'Unidad Detectada': 'Miles o millones $',
+                                        'Umbral Actual': '10,000',
+                                        'Umbral Corregido': f"{p95:,.0f}",
+                                        'Status': '✅ Verificar'
+                                    })
+
+                            if unit_checks:
+                                st.dataframe(pd.DataFrame(unit_checks), use_container_width=True, hide_index=True)
+                                st.warning("""
+                                ⚠️ **PROBLEMA DETECTADO**: Los datos están en unidades diferentes a las esperadas por los umbrales.
+
+                                **Solución**: Usar los "Umbral Corregido" en `crisis_classifier.py`
+                                """)
+
+                        else:
+                            st.warning("No hay suficientes features disponibles para análisis estadístico")
 
                 # === PREDICTION EXPLANATION ===
                 with st.expander("🔍 Prediction Explanation (Why this probability?)"):
