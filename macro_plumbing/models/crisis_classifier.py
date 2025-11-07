@@ -308,7 +308,25 @@ class CrisisPredictor:
 
         # Prepare features (creates lag/volatility columns if they don't exist)
         # This is necessary because prepare_features() modifies df in-place
-        _ = self.prepare_features(df)
+        available_features = self.prepare_features(df)
+
+        # Check which features are actually available
+        missing_features = [f for f in self.features if f not in df.columns]
+
+        if missing_features:
+            # Use only available features
+            usable_features = [f for f in self.features if f in df.columns]
+
+            if len(usable_features) < 5:
+                raise ValueError(
+                    f"Too many missing features ({len(missing_features)}/{len(self.features)}). "
+                    f"Missing: {missing_features[:10]}... "
+                    "Retrain the model with current data."
+                )
+
+            # Fill missing features with zeros
+            for feat in missing_features:
+                df[feat] = 0.0
 
         # Now extract features
         X = df[self.features]
