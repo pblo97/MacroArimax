@@ -26,8 +26,8 @@ def create_interactive_graph_plotly(graph: "LiquidityGraph"):
     plotly.graph_objects.Figure
         Interactive graph figure
     """
-    # Get node positions using spring layout
-    pos = nx.spring_layout(graph.G, k=2, iterations=50, seed=42)
+    # Get node positions using spring layout with more spacing
+    pos = nx.spring_layout(graph.G, k=3, iterations=100, seed=42)
 
     # Extract node and edge data
     edge_traces = []
@@ -45,7 +45,7 @@ def create_interactive_graph_plotly(graph: "LiquidityGraph"):
 
         # Color and width based on flow
         edge_color = 'red' if is_drain else 'green'
-        edge_width = min(abs(flow) / 50, 10)  # Scale width, cap at 10
+        edge_width = min(abs(flow) / 100 + 1, 5)  # Scale width, cap at 5
 
         # Arrow annotation
         edge_trace = go.Scatter(
@@ -102,8 +102,13 @@ def create_interactive_graph_plotly(graph: "LiquidityGraph"):
         )
         node_text.append(hover_text)
 
-        # Size based on balance
-        node_sizes.append(max(abs(balance) / 50, 10))  # Scale size
+        # Size based on balance (use log scale to prevent giant nodes)
+        if abs(balance) > 0:
+            import math
+            size = 10 + 5 * math.log10(abs(balance) + 1)
+            node_sizes.append(min(size, 30))  # Cap at 30 pixels
+        else:
+            node_sizes.append(12)  # Default size
         node_colors.append(color_map.get(node_type, 'gray'))
 
     node_trace = go.Scatter(
@@ -133,11 +138,11 @@ def create_interactive_graph_plotly(graph: "LiquidityGraph"):
         },
         showlegend=False,
         hovermode='closest',
-        margin=dict(b=20, l=5, r=5, t=60),
+        margin=dict(b=40, l=40, r=40, t=80),
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, scaleanchor="x", scaleratio=1),
         plot_bgcolor='white',
-        height=600,
+        height=700,
     )
 
     return fig
@@ -208,8 +213,8 @@ def create_enhanced_graph_plotly(
 
         edge_types_seen.add(edge_type)
 
-        # Width based on flow magnitude
-        edge_width = min(abs(flow) / 50 + 2, 12)
+        # Width based on flow magnitude (reduced for cleaner look)
+        edge_width = min(abs(flow) / 100 + 1, 5)
 
         # Create edge trace
         edge_trace = go.Scatter(
@@ -308,8 +313,15 @@ def create_enhanced_graph_plotly(
         )
         node_text.append(hover_text)
 
-        # Size based on balance
-        node_sizes.append(max(abs(balance) / 30 + 15, 20))
+        # Size based on balance (reduced to prevent overlap)
+        # Use logarithmic scale for very large balances
+        if abs(balance) > 0:
+            import math
+            # Log scale for large values to prevent giant nodes
+            size = 10 + 5 * math.log10(abs(balance) + 1)
+            node_sizes.append(min(size, 35))  # Cap at 35 pixels
+        else:
+            node_sizes.append(15)  # Default size for zero balance
 
         # Border: Red and thick if vulnerable
         if name in vulnerable_set:
@@ -330,7 +342,7 @@ def create_enhanced_graph_plotly(
         hovertext=node_text,
         text=[node[0] for node in graph.G.nodes(data=True)],
         textposition="top center",
-        textfont=dict(size=10, color='black'),
+        textfont=dict(size=9, color='black', family='Arial'),
         marker=dict(
             size=node_sizes,
             color=node_colors,
@@ -387,11 +399,11 @@ def create_enhanced_graph_plotly(
         },
         showlegend=False,
         hovermode='closest',
-        margin=dict(b=20, l=5, r=5, t=80),
+        margin=dict(b=40, l=40, r=200, t=80),  # More margin for legend
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, scaleanchor="x", scaleratio=1),  # Equal aspect ratio
         plot_bgcolor='white',
-        height=700,
+        height=800,  # Taller graph
         annotations=[
             dict(
                 text=legend_text,
@@ -401,7 +413,7 @@ def create_enhanced_graph_plotly(
                 showarrow=False,
                 font=dict(size=9, family="monospace"),
                 align="left",
-                bgcolor="rgba(255, 255, 255, 0.8)",
+                bgcolor="rgba(255, 255, 255, 0.9)",
                 bordercolor="black",
                 borderwidth=1,
                 borderpad=10,
@@ -439,26 +451,26 @@ def _compute_enhanced_layout(G: nx.DiGraph) -> Dict[str, Tuple[float, float]]:
     # Manual positions for better visualization
     pos = {}
 
-    # Core nodes in center triangle
+    # Core nodes in center triangle (wider spacing)
     if 'Fed' in G.nodes():
-        pos['Fed'] = (0, 1)
+        pos['Fed'] = (0, 1.5)
     if 'Treasury' in G.nodes():
-        pos['Treasury'] = (-0.5, 0)
+        pos['Treasury'] = (-1.2, 0)
     if 'Banks' in G.nodes():
-        pos['Banks'] = (0.5, 0)
+        pos['Banks'] = (1.2, 0)
 
-    # NBFI nodes on outer circle
+    # NBFI nodes on outer circle (larger radius to avoid overlap)
     nbfi_present = [n for n in nbfi_nodes if n in G.nodes()]
     nbfi_count = len(nbfi_present)
     for i, node in enumerate(nbfi_present):
         angle = 2 * math.pi * i / nbfi_count + math.pi / 2
-        pos[node] = (2 * math.cos(angle), 2 * math.sin(angle))
+        pos[node] = (4 * math.cos(angle), 4 * math.sin(angle))
 
-    # Other nodes on middle circle
+    # Other nodes on middle circle (larger radius)
     other_nodes = [n for n in G.nodes() if n not in core_nodes and n not in nbfi_nodes]
     other_count = len(other_nodes)
     for i, node in enumerate(other_nodes):
         angle = 2 * math.pi * i / max(other_count, 1)
-        pos[node] = (1.3 * math.cos(angle), 1.3 * math.sin(angle))
+        pos[node] = (2.5 * math.cos(angle), 2.5 * math.sin(angle))
 
     return pos
