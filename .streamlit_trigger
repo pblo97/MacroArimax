@@ -1,0 +1,4 @@
+# Trigger file to force Streamlit Cloud redeploy
+# Last update: $(date)
+# Force redeploy to apply graph visualization fixes
+REDEPLOY_VERSION=2.0
