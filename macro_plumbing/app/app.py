@@ -24,6 +24,7 @@ from macro_plumbing.models.changepoints import detect_changepoints
 from macro_plumbing.models.anomalies import detect_anomalies
 from macro_plumbing.models.fusion import SignalFusion
 from macro_plumbing.graph.graph_builder_full import build_complete_liquidity_graph, detect_quarter_end
+from macro_plumbing.graph.enhanced_graph_builder import build_enhanced_graph
 from macro_plumbing.graph.visualization import create_interactive_graph_plotly
 from macro_plumbing.graph.graph_dynamics import GraphMarkovDynamics
 from macro_plumbing.graph.graph_contagion import StressContagion
@@ -452,13 +453,33 @@ if st.session_state.get('run_analysis', False):
         with st.spinner("Construyendo grafo de liquidez..."):
             graph = build_complete_liquidity_graph(df, quarter_end_relax=True)
 
+            # Build enhanced graph with all 4 phases
+            try:
+                enhanced_graph, enhanced_metrics = build_enhanced_graph(df)
+                show_enhanced = True
+            except Exception as e:
+                st.warning(f"Enhanced graph not available: {e}")
+                enhanced_graph = None
+                enhanced_metrics = None
+                show_enhanced = False
+
         # Tabs within Tab 3
-        subtab1, subtab2, subtab3, subtab4 = st.tabs([
-            "📈 Visualización",
-            "🧬 Estados Markov",
-            "🦠 Contagio",
-            "⚠️ Análisis Sistémico"
-        ])
+        if show_enhanced:
+            subtab1, subtab2, subtab3, subtab4, subtab5 = st.tabs([
+                "📈 Visualización",
+                "🧬 Estados Markov",
+                "🦠 Contagio",
+                "⚠️ Análisis Sistémico",
+                "🚀 Enhanced Metrics (4 Fases)"
+            ])
+        else:
+            subtab1, subtab2, subtab3, subtab4 = st.tabs([
+                "📈 Visualización",
+                "🧬 Estados Markov",
+                "🦠 Contagio",
+                "⚠️ Análisis Sistémico"
+            ])
+            subtab5 = None
 
         # Subtab 1: Visualization
         with subtab1:
@@ -899,6 +920,281 @@ if st.session_state.get('run_analysis', False):
                 st.error(f"Error en análisis sistémico: {e}")
                 import traceback
                 st.code(traceback.format_exc())
+
+        # Subtab 5: Enhanced Metrics (4 Phases)
+        if subtab5 is not None:
+            with subtab5:
+                st.subheader("🚀 Enhanced Liquidity Network Metrics")
+                st.markdown("""
+                **Comprehensive analysis based on 2023-2025 academic research** (ESRB, ECB, IMF, Fed)
+
+                - **Phase 1**: Margin Calls & Liquidity Spirals (Brunnermeier-Pedersen 2009, ESRB 2025)
+                - **Phase 2**: NBFI Sector Analysis (ECB FSR 2024 - #1 systemic risk)
+                - **Phase 3**: Dynamic Network Structure (Fed 2021)
+                - **Phase 4**: Advanced Metrics (Basel III SIFI, Cont et al. 2013)
+                """)
+
+                if enhanced_metrics is None:
+                    st.warning("Enhanced metrics not available. Check data quality.")
+                else:
+                    # === PHASE 1: MARGIN & LIQUIDITY SPIRALS ===
+                    st.divider()
+                    st.header("📊 Phase 1: Margin Calls & Liquidity Spirals")
+
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric(
+                            "🔥 Margin Stress Index",
+                            f"{enhanced_metrics.margin_stress_index:.2f}",
+                            help="Combined stress from IM/VM changes and haircut increases"
+                        )
+                    with col2:
+                        st.metric(
+                            "📈 Current Haircut",
+                            f"{enhanced_metrics.current_haircut:.1%}",
+                            help="Procyclical haircut level (baseline + stress adjustment)"
+                        )
+                    with col3:
+                        st.metric(
+                            "💰 ΔInitial Margin",
+                            f"${enhanced_metrics.delta_im/1e9:.1f}B",
+                            help="Change in Initial Margin (ISDA SIMM approach)"
+                        )
+                    with col4:
+                        st.metric(
+                            "📉 Variation Margin",
+                            f"${enhanced_metrics.vm/1e9:.1f}B",
+                            help="Mark-to-market margin calls"
+                        )
+
+                    # Margin Stress Gauge
+                    with st.expander("ℹ️ Margin Stress Interpretation"):
+                        st.markdown("""
+                        **Margin Stress Index** = z-score of (ΔIM + VM + Haircut increase)
+
+                        - **< 0**: Calm (margin requirements falling)
+                        - **0-1**: Normal volatility
+                        - **1-2**: Elevated (monitor closely)
+                        - **> 2**: CRISIS (forced liquidations likely)
+
+                        **Based on:**
+                        - ISDA SIMM (Standard Initial Margin Model)
+                        - IMF FSAP 2025 methodology
+                        - Brunnermeier-Pedersen (2009) liquidity spiral framework
+                        - Geanakoplos (2010) procyclical haircuts
+                        """)
+
+                    # === PHASE 2: NBFI SECTOR ===
+                    st.divider()
+                    st.header("🏦 Phase 2: NBFI Sector Analysis")
+                    st.caption("Non-Bank Financial Intermediaries - #1 systemic risk per ECB FSR 2024")
+
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric(
+                            "⚠️ NBFI Systemic Score",
+                            f"{enhanced_metrics.nbfi_systemic_score:.2f}",
+                            help="AUM-weighted stress across NBFI sectors"
+                        )
+                    with col2:
+                        st.metric(
+                            "🎯 Hedge Fund Stress",
+                            f"{enhanced_metrics.hedge_fund_stress:.1%}",
+                            help="~$4T AUM, 3-5x leverage"
+                        )
+                    with col3:
+                        st.metric(
+                            "💼 Asset Manager Stress",
+                            f"{enhanced_metrics.asset_manager_stress:.1%}",
+                            help="~$25T AUM, redemption risk"
+                        )
+                    with col4:
+                        st.metric(
+                            "🏛️ Insurance/Pension Stress",
+                            f"{enhanced_metrics.insurance_stress:.1%}",
+                            help="~$35T AUM, duration mismatch"
+                        )
+
+                    # NBFI Details
+                    with st.expander("📋 NBFI Sector Details"):
+                        st.markdown(f"""
+                        **Hedge Funds** (~$4T AUM, 3-5x leverage)
+                        - Stress: {enhanced_metrics.hedge_fund_stress:.1%}
+                        - Key vulnerability: Synthetic leverage via derivatives
+                        - Proxy: VIX (40%), HY_OAS (30%), MOVE (20%), cp_tbill_spread (10%)
+
+                        **Asset Managers** (~$25T AUM, 1.05x leverage)
+                        - Stress: {enhanced_metrics.asset_manager_stress:.1%}
+                        - Key vulnerability: Redemption spirals (ECB FSR 2024)
+                        - Proxy: VIX (equity funds), HY_OAS (bond funds), flow stress
+
+                        **Insurance/Pensions** (~$35T AUM)
+                        - Stress: {enhanced_metrics.insurance_stress:.1%}
+                        - Key vulnerability: Duration mismatch (long liabilities, market assets)
+                        - Proxy: DGS10 (low rates = underfunding), MOVE, credit spreads
+
+                        **Overall NBFI Systemic Score: {enhanced_metrics.nbfi_systemic_score:.2f}**
+                        - Weighted by AUM across all three sectors
+                        - Normalized to z-score
+                        """)
+
+                    # === PHASE 3: DYNAMIC NETWORK ===
+                    st.divider()
+                    st.header("📈 Phase 3: Dynamic Network Structure")
+                    st.caption("Time-varying network analysis (Fed 2021)")
+
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric(
+                            "🔗 Network Density",
+                            f"{enhanced_metrics.density:.1%}",
+                            help="How connected the network is (higher = more resilient)"
+                        )
+                    with col2:
+                        st.metric(
+                            "🎯 Centralization",
+                            f"{enhanced_metrics.centralization:.1%}",
+                            help="Hub-and-spoke concentration (higher = more fragile)"
+                        )
+                    with col3:
+                        largest_pct = enhanced_metrics.largest_component_pct
+                        st.metric(
+                            "🌐 Largest Component",
+                            f"{largest_pct:.1%}",
+                            help="% of nodes in largest connected component"
+                        )
+
+                    # Network interpretation
+                    if enhanced_metrics.centralization > 0.7:
+                        st.warning("⚠️ **HIGH CENTRALIZATION**: Network relies heavily on hub nodes (fragile)")
+                    elif enhanced_metrics.density < 0.3:
+                        st.warning("⚠️ **LOW DENSITY**: Network is sparsely connected (fragmentation risk)")
+                    else:
+                        st.success("✅ **HEALTHY NETWORK STRUCTURE**: Balanced connectivity")
+
+                    # === PHASE 4: ADVANCED METRICS ===
+                    st.divider()
+                    st.header("🎯 Phase 4: Advanced Systemic Risk Metrics")
+                    st.caption("Basel III SIFI framework, Cont et al. (2013), Network LCR")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric(
+                            "🦠 Contagion Index (CoI)",
+                            f"{enhanced_metrics.contagion_index:.1f}",
+                            help="Expected systemic losses from node failures (Cont et al. 2013)"
+                        )
+                    with col2:
+                        st.metric(
+                            "🛡️ Network Resilience",
+                            f"{enhanced_metrics.network_resilience:.1%}",
+                            help="Overall network robustness (0=fragile, 1=resilient)"
+                        )
+
+                    # Resilience interpretation
+                    if enhanced_metrics.network_resilience > 0.7:
+                        st.success("✅ **HIGH RESILIENCE**: Network is robust to shocks")
+                    elif enhanced_metrics.network_resilience > 0.5:
+                        st.info("ℹ️ **MODERATE RESILIENCE**: Monitor key nodes")
+                    else:
+                        st.error("🔴 **LOW RESILIENCE**: Network vulnerable to contagion")
+
+                    # Systemically Important Nodes (SIM)
+                    st.subheader("🏦 Systemically Important Financial Institutions (SIFIs)")
+                    st.caption("Based on Basel III framework: Size, Interconnectedness, Substitutability, Complexity")
+
+                    if enhanced_metrics.sim_scores:
+                        sim_data = []
+                        for node, sim in sorted(enhanced_metrics.sim_scores.items(), key=lambda x: x[1], reverse=True):
+                            # Get LCR for this node
+                            lcr = enhanced_metrics.lcr_scores.get(node, float('inf'))
+                            lcr_display = f"{lcr:.2f}" if lcr < 100 else "∞"
+
+                            # Determine status
+                            if sim > 0.5 and lcr < 1.0:
+                                status = "🔴 VULNERABLE (SIFI + Low LCR)"
+                            elif sim > 0.5:
+                                status = "🟡 MONITOR (SIFI)"
+                            elif lcr < 1.0:
+                                status = "🟠 Low Liquidity"
+                            else:
+                                status = "✅ Healthy"
+
+                            sim_data.append({
+                                'Node': node,
+                                'SIM Score': f"{sim:.3f}",
+                                'Network LCR': lcr_display,
+                                'Status': status
+                            })
+
+                        sim_df = pd.DataFrame(sim_data)
+                        st.dataframe(sim_df, use_container_width=True, hide_index=True)
+
+                    # Vulnerable Nodes
+                    if enhanced_metrics.vulnerable_nodes:
+                        st.subheader("⚠️ Vulnerable Nodes (SIFI + Low Liquidity)")
+                        st.caption("Nodes that are systemically important BUT have inadequate liquidity coverage")
+
+                        vuln_data = []
+                        for node, reason, lcr, sim in enhanced_metrics.vulnerable_nodes:
+                            vuln_data.append({
+                                'Node': node,
+                                'Reason': reason,
+                                'Network LCR': f"{lcr:.2f}",
+                                'SIM Score': f"{sim:.3f}"
+                            })
+
+                        vuln_df = pd.DataFrame(vuln_data)
+                        st.dataframe(vuln_df, use_container_width=True, hide_index=True)
+
+                        st.error(f"🔴 **{len(enhanced_metrics.vulnerable_nodes)} VULNERABLE NODES DETECTED**")
+                        st.markdown("""
+                        **Recommended Actions:**
+                        - Increase liquidity buffers for vulnerable nodes
+                        - Monitor for contagion risk
+                        - Consider emergency liquidity facilities
+                        - Review interconnections to vulnerable nodes
+                        """)
+                    else:
+                        st.success("✅ No vulnerable nodes detected (all SIFIs have adequate LCR)")
+
+                    # Enhanced Graph Summary
+                    st.divider()
+                    st.subheader("📋 Enhanced Graph Summary")
+
+                    with st.expander("View Complete Enhanced Graph Summary"):
+                        if enhanced_graph is not None:
+                            st.code(enhanced_graph.summary(), language="text")
+
+                    # Data Sources
+                    with st.expander("📊 Data Sources (All FREE from FRED)"):
+                        st.markdown("""
+                        **All metrics computed using ONLY free FRED data:**
+
+                        **Core Plumbing:**
+                        - RESERVES: Bank reserves at Fed
+                        - TGA: Treasury General Account
+                        - RRP: Overnight Reverse Repo
+                        - TGCR: Tri-party General Collateral Rate
+
+                        **Volatility & Stress:**
+                        - VIX: Equity market volatility
+                        - MOVE: Treasury market volatility
+                        - HY_OAS: High-yield credit spread
+
+                        **Macro Conditions:**
+                        - DGS10: 10-year Treasury yield
+                        - SP500: S&P 500 index
+                        - BBB-AAA: Investment-grade credit spread
+                        - cp_tbill_spread: Commercial paper - T-bill spread
+
+                        **Industry Estimates (NBFI):**
+                        - Hedge Funds: ~$4T AUM, 3-5x leverage (industry data)
+                        - Asset Managers: ~$25T AUM (ICI data)
+                        - Insurance/Pensions: ~$35T AUM (NAIC/BLS data)
+
+                        **NO PAID DATA REQUIRED** ✅
+                        """)
 
     # ==================
     # Tab 4: Backtest Walk-Forward

@@ -51,18 +51,18 @@ def estimate_initial_margin_change(
     sqrt_horizon = np.sqrt(horizon_days / 252)
 
     # 1. Equity component (VIX)
-    vix = df.get('VIX', pd.Series(0, index=df.index)).fillna(method='ffill')
+    vix = df.get('VIX', pd.Series(0, index=df.index)).ffill()
     equity_vol = vix / 100  # Convert to decimal
     equity_im = notional_estimate * 0.3 * equity_vol * sqrt_horizon * confidence_z
 
     # 2. Rates component (MOVE)
-    move = df.get('MOVE', pd.Series(0, index=df.index)).fillna(method='ffill')
+    move = df.get('MOVE', pd.Series(0, index=df.index)).ffill()
     # MOVE is in bps, convert to decimal
     rates_vol = move / 10000
     rates_im = notional_estimate * 0.4 * rates_vol * sqrt_horizon * confidence_z
 
     # 3. Credit component (HY_OAS volatility)
-    hy_oas = df.get('HY_OAS', pd.Series(0, index=df.index)).fillna(method='ffill')
+    hy_oas = df.get('HY_OAS', pd.Series(0, index=df.index)).ffill()
     # Use rolling vol of HY_OAS as credit vol proxy
     credit_vol = hy_oas.pct_change().rolling(21).std().fillna(0)
     credit_im = notional_estimate * 0.3 * credit_vol * sqrt_horizon * confidence_z
@@ -103,19 +103,19 @@ def estimate_variation_margin(
         Daily VM flows (in $M)
     """
     # 1. Equity VM (from equity returns)
-    sp500 = df.get('SP500', pd.Series(0, index=df.index)).fillna(method='ffill')
+    sp500 = df.get('SP500', pd.Series(0, index=df.index)).ffill()
     equity_returns = sp500.pct_change().fillna(0)
     equity_vm = notional_estimate * 0.3 * equity_returns
 
     # 2. Rates VM (from 10Y Treasury returns)
-    dgs10 = df.get('DGS10', pd.Series(0, index=df.index)).fillna(method='ffill')
+    dgs10 = df.get('DGS10', pd.Series(0, index=df.index)).ffill()
     # Duration approximation: -duration * Δy
     duration = 8.0  # 10Y bond duration ~8 years
     rates_returns = -duration * dgs10.diff() / 100  # bps to decimal
     rates_vm = notional_estimate * 0.4 * rates_returns
 
     # 3. Credit VM (from HY_OAS changes)
-    hy_oas = df.get('HY_OAS', pd.Series(0, index=df.index)).fillna(method='ffill')
+    hy_oas = df.get('HY_OAS', pd.Series(0, index=df.index)).ffill()
     credit_returns = -hy_oas.diff() / 100  # Wider spread = loss
     credit_vm = notional_estimate * 0.3 * credit_returns
 
