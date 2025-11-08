@@ -1341,19 +1341,24 @@ if st.session_state.get('run_analysis', False):
                 # === CALIBRATION ANALYSIS ===
                 with st.expander("⚙️ Calibración de Umbrales (Threshold Calibration)"):
                     st.markdown("""
-                    **Análisis de los umbrales actuales vs datos históricos**
+                    **Crisis Label Definition** (used for training labels only)
 
-                    Si muchos días exceden los umbrales, el modelo marcará la mayoría como "crisis" y sobrepredicirá.
+                    The model uses **3 features** for prediction (cp_tbill_spread, T10Y2Y, NFCI),
+                    but crisis labels are defined using market stress indicators:
+
+                    - VIX > 30 (market panic) OR
+                    - cp_tbill_spread > 1.0% (money market freeze) OR
+                    - HY_OAS > 8.0% (credit crisis)
+
+                    Note: VIX and HY_OAS are used ONLY for labeling training data as "crisis" or "normal".
+                    They are NOT used as model features due to multicollinearity (VIF > 10).
                     """)
 
-                    # Analyze each crisis indicator
-                    # Showing OLD thresholds vs NEW CALIBRATED thresholds
+                    # Analyze crisis indicators (for labeling only, not model features)
                     indicators_config = {
-                        'VIX': {'old_threshold': 35, 'new_threshold': 30, 'unit': 'index'},
-                        'cp_tbill_spread': {'old_threshold': 150, 'new_threshold': 1.0, 'unit': '% (decimal)'},
-                        'HY_OAS': {'old_threshold': 700, 'new_threshold': 8.0, 'unit': '% (decimal)'},
-                        # DISCOUNT_WINDOW removed from crisis definition (kept as feature only)
-                        # 'DISCOUNT_WINDOW': {'old_threshold': 10000, 'new_threshold': None, 'unit': 'M$'}
+                        'VIX': {'old_threshold': 35, 'new_threshold': 30, 'unit': 'index', 'purpose': 'Label only'},
+                        'cp_tbill_spread': {'old_threshold': 150, 'new_threshold': 1.0, 'unit': '% (decimal)', 'purpose': 'Label + Feature'},
+                        'HY_OAS': {'old_threshold': 700, 'new_threshold': 8.0, 'unit': '% (decimal)', 'purpose': 'Label only'},
                     }
 
                     calibration_results = []
@@ -1402,10 +1407,9 @@ if st.session_state.get('run_analysis', False):
 
                         calibration_results.append({
                             'Indicador': indicator,
-                            'Umbral Viejo': f"{old_threshold:,.0f}",
-                            'Umbral Nuevo (P95)': f"{new_threshold:,.2f}",
+                            'Propósito': config['purpose'],
+                            'Umbral Nuevo': f"{new_threshold:,.2f}",
                             'Valor Actual': f"{current_val:,.2f}",
-                            '% Días > Viejo': f"{pct_above_old:.1f}%",
                             '% Días > Nuevo': f"{pct_above_new:.1f}%",
                             'Status': status,
                             'Unidad': config['unit']
@@ -1420,17 +1424,21 @@ if st.session_state.get('run_analysis', False):
 
                         st.markdown("""
                         **Interpretación:**
-                        - **Umbral Viejo**: Umbral original que causaba 99.9% falsos positivos
-                        - **Umbral Nuevo (P95)**: Umbral calibrado (percentil 95) - ya implementado en el modelo
-                        - **% Días > Viejo**: Porcentaje de días que excedían umbral viejo (100% = problema crítico)
-                        - **% Días > Nuevo**: Porcentaje de días que exceden umbral nuevo (~5% = correcto)
+                        - **Propósito**:
+                          - **Label only**: Usado SOLO para definir etiquetas de crisis en datos de entrenamiento (no es feature del modelo)
+                          - **Label + Feature**: Usado tanto para etiquetas como feature del modelo
+                        - **Umbral Nuevo**: Threshold calibrado basado en niveles de crisis históricos
+                        - **% Días > Nuevo**: ~5-10% es correcto (eventos raros de estrés)
                         - **Status**:
                           - ✅ BUENO: <10% días exceden (eventos raros)
                           - 🟢 OK: 10-20% (estrés moderado)
                           - 🟡 ADVERTENCIA: 20-50% (umbral bajo)
-                          - 🔴 CRÍTICO: >50% (umbral muy bajo, marca mayoría como crisis)
+                          - 🔴 CRÍTICO: >50% (marca mayoría como crisis)
 
-                        **Umbrales ACTUALES en el modelo (ya calibrados):**
+                        **IMPORTANTE**:
+                        - El **modelo usa SOLO 3 features** para predicción: cp_tbill_spread, T10Y2Y, NFCI
+                        - VIX y HY_OAS se usan ÚNICAMENTE para crear etiquetas de entrenamiento (no son features del modelo)
+                        - Esto elimina multicolinealidad (VIF < 2 para todas las features)
                         """)
 
                         # Generate calibrated code (CURRENT implementation)
@@ -1608,70 +1616,102 @@ if st.session_state.get('run_analysis', False):
 
                             # 4. UNIT DETECTION
                             st.markdown("#### 4. Detección de Unidades")
-                            st.markdown("Verifica si los datos están en las unidades esperadas")
+                            st.markdown("Verifica que los datos estén en formato % decimal (correcto para FRED)")
 
                             unit_checks = []
 
-                            # Check cp_tbill_spread (should be in %, not bps)
+                            # Check cp_tbill_spread (should be in % decimal format for FRED)
                             if 'cp_tbill_spread' in df.columns:
                                 val = df['cp_tbill_spread'].iloc[-1]
-                                expected_range = "50-200 bps (0.50-2.00%)"
-                                if val < 10:  # Likely in % format
+                                val_bps = val * 100  # Convert to bps for display
+
+                                # FRED data comes in % decimal format (0.03 = 0.03%, not 3%)
+                                if val < 10:  # Correctly in % decimal format
+                                    # Determine market condition
+                                    if val < 0.1:
+                                        condition = "CALM (very low spread)"
+                                    elif val < 0.5:
+                                        condition = "NORMAL"
+                                    elif val < 1.0:
+                                        condition = "ELEVATED"
+                                    else:
+                                        condition = "CRISIS"
+
                                     unit_checks.append({
                                         'Feature': 'cp_tbill_spread',
-                                        'Valor Actual': f"{val:.4f}",
-                                        'Rango Esperado': expected_range,
-                                        'Unidad Detectada': '% (decimal)',
-                                        'Umbral Actual': '150 bps',
-                                        'Umbral Corregido': '1.50 (150 bps)',
-                                        'Status': '⚠️ Unidades incorrectas'
+                                        'Valor Actual': f"{val:.4f}% ({val_bps:.1f} bps)",
+                                        'Unidad': '% decimal',
+                                        'Threshold Crisis': '1.0% (100 bps)',
+                                        'Condición': condition,
+                                        'Status': '✅ Formato correcto'
                                     })
                                 else:
+                                    # Data appears to be in wrong format
                                     unit_checks.append({
                                         'Feature': 'cp_tbill_spread',
                                         'Valor Actual': f"{val:.2f}",
-                                        'Rango Esperado': expected_range,
-                                        'Unidad Detectada': 'bps',
-                                        'Umbral Actual': '150 bps',
-                                        'Umbral Corregido': '150',
-                                        'Status': '✅ Unidades correctas'
+                                        'Unidad': 'DESCONOCIDA',
+                                        'Threshold Crisis': '100 bps or 1.0%',
+                                        'Condición': 'VERIFICAR',
+                                        'Status': '⚠️ Formato incorrecto (>10)'
                                     })
 
-                            # Check HY_OAS
+                            # Check HY_OAS (should be in % decimal format for FRED)
                             if 'HY_OAS' in df.columns:
                                 val = df['HY_OAS'].iloc[-1]
-                                expected_range = "300-1000 bps (3.00-10.00%)"
-                                if val < 50:  # Likely in % format
+                                val_bps = val * 100  # Convert to bps for display
+
+                                # FRED data comes in % decimal format
+                                if val < 50:  # Correctly in % decimal format
+                                    # Determine market condition
+                                    if val < 4.0:
+                                        condition = "VERY TIGHT (low risk)"
+                                    elif val < 6.0:
+                                        condition = "NORMAL"
+                                    elif val < 8.0:
+                                        condition = "ELEVATED"
+                                    else:
+                                        condition = "CRISIS"
+
                                     unit_checks.append({
                                         'Feature': 'HY_OAS',
-                                        'Valor Actual': f"{val:.4f}",
-                                        'Rango Esperado': expected_range,
-                                        'Unidad Detectada': '% (decimal)',
-                                        'Umbral Actual': '700 bps',
-                                        'Umbral Corregido': '7.00 (700 bps)',
-                                        'Status': '⚠️ Unidades incorrectas'
+                                        'Valor Actual': f"{val:.2f}% ({val_bps:.0f} bps)",
+                                        'Unidad': '% decimal',
+                                        'Threshold Crisis': '8.0% (800 bps)',
+                                        'Condición': condition,
+                                        'Status': '✅ Formato correcto'
                                     })
                                 else:
+                                    # Data appears to be in wrong format
                                     unit_checks.append({
                                         'Feature': 'HY_OAS',
                                         'Valor Actual': f"{val:.2f}",
-                                        'Rango Esperado': expected_range,
-                                        'Unidad Detectada': 'bps',
-                                        'Umbral Actual': '700 bps',
-                                        'Umbral Corregido': '700',
-                                        'Status': '✅ Unidades correctas'
+                                        'Unidad': 'DESCONOCIDA',
+                                        'Threshold Crisis': '800 bps or 8.0%',
+                                        'Condición': 'VERIFICAR',
+                                        'Status': '⚠️ Formato incorrecto (>50)'
                                     })
-
-                            # DISCOUNT_WINDOW - REMOVED from model due to multicollinearity (VIF=15.63)
-                            # and unclear data units causing false positives
 
                             if unit_checks:
                                 st.dataframe(pd.DataFrame(unit_checks), use_container_width=True, hide_index=True)
-                                st.warning("""
-                                ⚠️ **PROBLEMA DETECTADO**: Los datos están en unidades diferentes a las esperadas por los umbrales.
 
-                                **Solución**: Usar los "Umbral Corregido" en `crisis_classifier.py`
-                                """)
+                                # Check if all are correct
+                                all_correct = all('✅' in check['Status'] for check in unit_checks)
+
+                                if all_correct:
+                                    st.success("""
+                                    ✅ **Unidades correctas**: Los datos están en formato % decimal (estándar FRED)
+
+                                    Los thresholds en `crisis_classifier.py` son correctos:
+                                    - cp_tbill_spread > 1.0 (100 bps)
+                                    - HY_OAS > 8.0 (800 bps)
+                                    """)
+                                else:
+                                    st.warning("""
+                                    ⚠️ **ADVERTENCIA**: Los datos podrían estar en formato incorrecto.
+
+                                    Verifica con la documentación de FRED las unidades de la serie.
+                                    """)
 
                         else:
                             st.warning("No hay suficientes features disponibles para análisis estadístico")
