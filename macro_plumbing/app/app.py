@@ -1445,7 +1445,7 @@ if st.session_state.get('run_analysis', False):
                         suggested_code = "# UMBRALES ACTUALES IMPLEMENTADOS (basados en niveles de crisis históricos)\ncrisis_conditions = (\n"
                         for result in calibration_results:
                             indicator = result['Indicador']
-                            new_threshold_str = result['Umbral Nuevo (P95)']
+                            new_threshold_str = result['Umbral Nuevo']
                             new_threshold_val = float(new_threshold_str.replace(',', ''))
                             suggested_code += f"    (df['{indicator}'] > {new_threshold_val:.2f}) |\n"
                         suggested_code = suggested_code.rstrip(' |\n') + "\n)"
