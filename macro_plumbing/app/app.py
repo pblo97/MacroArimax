@@ -25,7 +25,7 @@ from macro_plumbing.models.anomalies import detect_anomalies
 from macro_plumbing.models.fusion import SignalFusion
 from macro_plumbing.graph.graph_builder_full import build_complete_liquidity_graph, detect_quarter_end
 from macro_plumbing.graph.enhanced_graph_builder import build_enhanced_graph
-from macro_plumbing.graph.visualization import create_interactive_graph_plotly
+from macro_plumbing.graph.visualization import create_interactive_graph_plotly, create_enhanced_graph_plotly
 from macro_plumbing.graph.graph_dynamics import GraphMarkovDynamics
 from macro_plumbing.graph.graph_contagion import StressContagion
 from macro_plumbing.graph.graph_analysis import LiquidityNetworkAnalysis
@@ -484,11 +484,27 @@ if st.session_state.get('run_analysis', False):
         # Subtab 1: Visualization
         with subtab1:
             st.subheader("Grafo Interactivo de Flujos")
-            try:
-                fig_graph = create_interactive_graph_plotly(graph)
-                st.plotly_chart(fig_graph, use_container_width=True)
-            except Exception as e:
-                st.error(f"Error creando visualización: {e}")
+
+            # Show enhanced graph if available
+            if show_enhanced and enhanced_graph is not None and enhanced_metrics is not None:
+                try:
+                    st.info("🚀 Showing **Enhanced Graph** with all 4 phases - Click legend for details!")
+                    fig_graph = create_enhanced_graph_plotly(enhanced_graph, enhanced_metrics)
+                    st.plotly_chart(fig_graph, use_container_width=True)
+                except Exception as e:
+                    st.warning(f"Enhanced visualization failed: {e}. Falling back to standard graph.")
+                    try:
+                        fig_graph = create_interactive_graph_plotly(graph)
+                        st.plotly_chart(fig_graph, use_container_width=True)
+                    except Exception as e2:
+                        st.error(f"Error creando visualización: {e2}")
+            else:
+                # Standard graph
+                try:
+                    fig_graph = create_interactive_graph_plotly(graph)
+                    st.plotly_chart(fig_graph, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error creando visualización: {e}")
 
             # Basic insights
             col1, col2, col3 = st.columns(3)
