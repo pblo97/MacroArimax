@@ -1,6 +1,9 @@
 """
 visualization.py
 Interactive visualization for liquidity graphs.
+
+VERSION: 2.0 - Fixed giant node overlap (logarithmic scaling)
+LAST_UPDATE: 2025-11-08
 """
 
 import plotly.graph_objects as go
@@ -10,6 +13,9 @@ from typing import TYPE_CHECKING, Optional, Dict, List, Tuple
 if TYPE_CHECKING:
     from macro_plumbing.graph.graph_builder import LiquidityGraph
     from macro_plumbing.graph.enhanced_graph_builder import EnhancedLiquidityGraph, EnhancedGraphMetrics
+
+# Debug: Print version on import to verify correct code is loaded
+print("🔄 Visualization module loaded - VERSION 2.0 (Fixed node overlap)")
 
 
 def create_interactive_graph_plotly(graph: "LiquidityGraph"):
@@ -106,7 +112,11 @@ def create_interactive_graph_plotly(graph: "LiquidityGraph"):
         if abs(balance) > 0:
             import math
             size = 10 + 5 * math.log10(abs(balance) + 1)
-            node_sizes.append(min(size, 30))  # Cap at 30 pixels
+            final_size = min(size, 30)  # Cap at 30 pixels
+            node_sizes.append(final_size)
+            # Debug: Print node sizes to verify logarithmic scaling is active
+            if name in ['Insurance_Pensions', 'Asset_Managers', 'Hedge_Funds', 'Fed', 'Banks']:
+                print(f"📊 {name}: balance={balance:.1f}B → size={final_size:.1f}px (LOG SCALE ✓)")
         else:
             node_sizes.append(12)  # Default size
         node_colors.append(color_map.get(node_type, 'gray'))
@@ -319,7 +329,11 @@ def create_enhanced_graph_plotly(
             import math
             # Log scale for large values to prevent giant nodes
             size = 10 + 5 * math.log10(abs(balance) + 1)
-            node_sizes.append(min(size, 35))  # Cap at 35 pixels
+            final_size = min(size, 35)  # Cap at 35 pixels
+            node_sizes.append(final_size)
+            # Debug: Print enhanced node sizes
+            if name in ['Insurance_Pensions', 'Asset_Managers', 'Hedge_Funds', 'Fed', 'Banks']:
+                print(f"📊 ENHANCED {name}: balance={balance:.1f}B → size={final_size:.1f}px (LOG SCALE ✓)")
         else:
             node_sizes.append(15)  # Default size for zero balance
 
