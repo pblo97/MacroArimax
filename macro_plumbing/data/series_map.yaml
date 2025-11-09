@@ -412,13 +412,18 @@ derived_features:
     description: Net Liquidity (Yardeni-style)
   delta_rrp:
     formula: diff(RRP)
-    description: Daily change in ON RRP
+    description: Daily change in ON RRP (daily series)
+    frequency: daily
   delta_tga:
     formula: diff(TGA)
-    description: Daily change in TGA
+    description: Daily change in TGA (WEEKLY series - see update_frequencies section)
+    frequency: weekly
+    note: Will be 0 on non-Wednesday days. Use get_weekly_delta() for analysis.
   delta_reserves:
     formula: diff(RESERVES)
-    description: Daily change in Reserves
+    description: Daily change in Reserves (WEEKLY series - see update_frequencies section)
+    frequency: weekly
+    note: Will be 0 on non-Wednesday days. Use get_weekly_delta() for analysis.
   delta_net_liquidity:
     formula: diff(net_liquidity)
     description: Daily change in Net Liquidity
@@ -555,3 +560,70 @@ processing:
   rolling_windows:
     weekly: 52
     monthly: 36
+
+# ====================================================================================
+# UPDATE FREQUENCIES
+# ====================================================================================
+# CRITICAL: Different series have different update frequencies.
+# Mixing frequencies in statistical analysis creates bias.
+#
+# WEEKLY SERIES (update Wednesdays only):
+#   - RESERVES (TOTRESNS) - H.3 report, updated Thursdays (reflecting Wed data)
+#   - TGA (WTREGEN) - H.4.1 report, updated Thursdays (reflecting Wed data)
+#
+# DAILY SERIES (update every business day):
+#   - RRP (RRPONTSYD)
+#   - SOFR, EFFR, OBFR, TGCR (all money market rates)
+#   - Most stress indicators (VIX, spreads, yields)
+#
+# IMPORTANT IMPLICATIONS:
+#
+# 1. Delta calculations:
+#    - delta_reserves, delta_tga: Will be 0 on Mon, Tue, Thu, Fri
+#    - delta_rrp: Non-zero every business day
+#    - Solution: Use get_weekly_delta() for weekly series (lookback to last Wednesday)
+#
+# 2. Anomaly detection:
+#    - DO NOT mix weekly and daily deltas in same Isolation Forest
+#    - Solution: Separate detection by frequency (see app.py:234-257)
+#
+# 3. Z-score calculations:
+#    - DO NOT calculate z-score with 80% zeros (weekly series on daily frequency)
+#    - Solution: Use zscore_weekly() which filters to non-zero values only
+#
+# 4. Reserve identity validation:
+#    - ΔReserves ≈ -ΔTGA - ΔRRP only meaningful on Wednesdays
+#    - Solution: Filter to Wednesdays before validation
+#
+# References:
+#   - Federal Reserve H.3 report: https://www.federalreserve.gov/releases/h3/
+#   - Federal Reserve H.4.1 report: https://www.federalreserve.gov/releases/h41/
+#
+update_frequencies:
+  weekly_wednesday:
+    series:
+      - RESERVES
+      - TGA
+      - BANK_RESERVES_WEEKLY
+    description: Updated weekly on Wednesdays (reported Thursdays)
+    note: Delta will be 0 on non-Wednesday days
+    special_handling_required: true
+    functions:
+      - get_weekly_delta() for flow calculations
+      - zscore_weekly() for z-score calculations
+      - Filter to Wednesdays for identity validation
+
+  daily:
+    series:
+      - RRP
+      - SOFR
+      - EFFR
+      - OBFR
+      - TGCR
+      - VIX
+      - HY_OAS
+      - T10Y2Y
+      - All spreads
+    description: Updated every business day
+    note: Can use standard diff() for deltas
+    special_handling_required: false
