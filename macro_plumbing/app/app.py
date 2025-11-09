@@ -486,6 +486,14 @@ if st.session_state.get('run_analysis', False):
             try:
                 enhanced_graph, enhanced_metrics = build_enhanced_graph(df)
                 show_enhanced = True
+
+                # Show debug info if available
+                if hasattr(enhanced_graph, 'debug_info') and enhanced_graph.debug_info:
+                    with st.expander("🔍 DEBUG INFO - Frecuencias de series (RESERVES/TGA)", expanded=True):
+                        if 'reserves' in enhanced_graph.debug_info:
+                            st.code(enhanced_graph.debug_info['reserves'], language='text')
+                        else:
+                            st.warning("No hay debug info para RESERVES")
             except Exception as e:
                 st.warning(f"Enhanced graph not available: {e}")
                 enhanced_graph = None

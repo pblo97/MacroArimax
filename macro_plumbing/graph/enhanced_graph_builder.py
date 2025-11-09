@@ -300,26 +300,30 @@ class EnhancedLiquidityGraph:
         # Fed → Banks (reserves) - use pre-computed delta_reserves
         delta_res = safe_get_latest('delta_reserves', fallback_col='RESERVES')
 
-        # Debug logging for RESERVES
+        # Collect debug info for RESERVES
+        self.debug_info = {}  # Initialize debug info dict
         if 'RESERVES' in self.df.columns:
             reserves_series = self.df['RESERVES'].dropna()
             if len(reserves_series) >= 10:
-                print(f"\n🔍 DEBUG RESERVES:")
-                print(f"  Últimos 10 valores de RESERVES:")
+                debug_lines = []
+                debug_lines.append("🔍 DEBUG RESERVES:")
+                debug_lines.append("  Últimos 10 valores de RESERVES:")
                 for date, value in reserves_series.tail(10).items():
                     day = date.strftime('%a')
-                    print(f"    {date.strftime('%Y-%m-%d')} ({day}): {value:.2f}")
+                    debug_lines.append(f"    {date.strftime('%Y-%m-%d')} ({day}): {value:.2f}")
 
                 deltas = reserves_series.diff()
                 non_zero = deltas[deltas.abs() > 0.01].tail(5)
-                print(f"  Últimos 5 cambios no-cero:")
+                debug_lines.append("  Últimos 5 cambios no-cero:")
                 if len(non_zero) > 0:
                     for date, value in non_zero.items():
                         day = date.strftime('%a')
-                        print(f"    {date.strftime('%Y-%m-%d')} ({day}): {value:.2f}")
+                        debug_lines.append(f"    {date.strftime('%Y-%m-%d')} ({day}): {value:.2f}")
                 else:
-                    print(f"    ❌ No hay cambios no-cero en los datos disponibles")
-                print(f"  delta_res seleccionado: {delta_res:.2f}\n")
+                    debug_lines.append("    ❌ No hay cambios no-cero en los datos disponibles")
+                debug_lines.append(f"  delta_res seleccionado: {delta_res:.2f}")
+
+                self.debug_info['reserves'] = '\n'.join(debug_lines)
 
         self.G.add_edge(
             'Fed',
