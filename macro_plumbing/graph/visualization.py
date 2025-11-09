@@ -467,73 +467,98 @@ def create_enhanced_graph_plotly(
     legend_text = "<br>".join(legend_parts)
 
     # Prepare annotations list
-    annotations = [
-        # Main legend
-        dict(
-            text=legend_text,
-            xref="paper", yref="paper",
-            x=1.02, y=0.5,
-            xanchor="left", yanchor="middle",
-            showarrow=False,
-            font=dict(size=9, family="monospace"),
-            align="left",
-            bgcolor="rgba(255, 255, 255, 0.95)",
-            bordercolor="red" if vulnerable_set else "black",
-            borderwidth=2,
-            borderpad=10,
-        )
-    ]
+    annotations = []
 
-    # Add Phase 4 alert banner if there are vulnerable nodes
-    if vulnerable_set:
-        annotations.append(
-            dict(
-                text=f"<b>⚠️ PHASE 4 ALERT: {len(vulnerable_set)} VULNERABLE NODE(S)</b>",
-                xref="paper", yref="paper",
-                x=0.5, y=1.05,
-                xanchor="center", yanchor="bottom",
-                showarrow=False,
-                font=dict(size=12, family="Arial", color="red"),
-                bgcolor="rgba(255, 255, 0, 0.3)",
-                bordercolor="red",
-                borderwidth=2,
-                borderpad=5,
-            )
-        )
-
-    # Add contagion risk indicator
+    # Add contagion risk indicator in top-left corner
     contagion_color = "red" if metrics.contagion_index > 100 else "orange" if metrics.contagion_index > 50 else "green"
     contagion_status = "HIGH" if metrics.contagion_index > 100 else "MEDIUM" if metrics.contagion_index > 50 else "LOW"
 
     annotations.append(
         dict(
-            text=f"<b>Contagion Risk: {contagion_status}</b><br>Index: {metrics.contagion_index:.1f}",
+            text=f"<b>Contagion: {contagion_status}</b><br>{metrics.contagion_index:.1f}",
             xref="paper", yref="paper",
-            x=0.02, y=0.98,
+            x=0.01, y=0.99,
             xanchor="left", yanchor="top",
             showarrow=False,
-            font=dict(size=10, family="monospace", color=contagion_color),
-            bgcolor="rgba(255, 255, 255, 0.9)",
+            font=dict(size=10, family="Arial", color="white"),
+            bgcolor=contagion_color,
             bordercolor=contagion_color,
             borderwidth=2,
-            borderpad=5,
+            borderpad=8,
         )
     )
 
+    # Add resilience indicator in top-left (below contagion)
+    resilience_color = "green" if metrics.network_resilience > 0.7 else "orange" if metrics.network_resilience > 0.4 else "red"
+    annotations.append(
+        dict(
+            text=f"<b>Resilience:</b> {metrics.network_resilience:.1%}",
+            xref="paper", yref="paper",
+            x=0.01, y=0.91,
+            xanchor="left", yanchor="top",
+            showarrow=False,
+            font=dict(size=9, family="Arial", color="white"),
+            bgcolor=resilience_color,
+            bordercolor=resilience_color,
+            borderwidth=2,
+            borderpad=6,
+        )
+    )
+
+    # Add Phase 4 alert banner if there are vulnerable nodes (below title, not over it)
+    if vulnerable_set:
+        annotations.append(
+            dict(
+                text=f"<b>⚠️ ALERT: {len(vulnerable_set)} VULNERABLE NODE(S) DETECTED</b>",
+                xref="paper", yref="paper",
+                x=0.5, y=0.985,
+                xanchor="center", yanchor="top",
+                showarrow=False,
+                font=dict(size=11, family="Arial Black", color="darkred"),
+                bgcolor="rgba(255, 200, 0, 0.9)",
+                bordercolor="darkred",
+                borderwidth=3,
+                borderpad=8,
+            )
+        )
+
+    # Main legend on the right side
+    annotations.append(
+        dict(
+            text=legend_text,
+            xref="paper", yref="paper",
+            x=1.01, y=0.5,
+            xanchor="left", yanchor="middle",
+            showarrow=False,
+            font=dict(size=9, family="Courier New"),
+            align="left",
+            bgcolor="rgba(255, 255, 255, 0.98)",
+            bordercolor="red" if vulnerable_set else "darkblue",
+            borderwidth=3 if vulnerable_set else 2,
+            borderpad=12,
+        )
+    )
+
+    # Determine title color based on risk
+    title_color = "darkred" if vulnerable_set else "darkblue"
+
     fig.update_layout(
         title={
-            'text': "Enhanced Liquidity Network - PHASE 4 ANALYSIS<br><sub>🔴 SIM-based Risk | ⚠️ Vulnerable Nodes | 🟣 Margin Stress | 🔵 NBFI Flows</sub>",
+            'text': f"<b>Enhanced Liquidity Network - PHASE 4 ANALYSIS</b><br><sub>🔴 SIM Risk | ⚠️ Vulnerabilities | 🟣 Margins | 🔵 NBFI</sub>",
             'x': 0.5,
+            'y': 0.98,
             'xanchor': 'center',
-            'font': dict(size=16, family='Arial Black')
+            'yanchor': 'top',
+            'font': dict(size=18, family='Arial Black', color=title_color)
         },
         showlegend=False,
         hovermode='closest',
-        margin=dict(b=40, l=40, r=240, t=120),  # More margin for legend and title
+        margin=dict(b=50, l=50, r=260, t=140),  # Increased top margin for clean title area
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, scaleanchor="x", scaleratio=1),  # Equal aspect ratio
-        plot_bgcolor='rgba(250, 250, 250, 1)',  # Light grey background
-        height=850,  # Taller graph
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, scaleanchor="x", scaleratio=1),
+        plot_bgcolor='rgba(245, 245, 250, 1)',  # Subtle blue-grey background
+        paper_bgcolor='rgba(255, 255, 255, 1)',
+        height=900,  # Increased height for better spacing
         annotations=annotations
     )
 
