@@ -228,28 +228,43 @@ def create_enhanced_graph_plotly(
 
         edge_types_seen.add(edge_type)
 
-        # Width based on flow magnitude (reduced for cleaner look)
-        base_width = min(abs(flow) / 100 + 1, 5)
+        # Width based on flow magnitude (improved scaling for visibility)
+        base_width = min(abs(flow) / 80 + 1.5, 6)  # Slightly thicker base width
 
         # Increase width for high-contagion edges (Phase 4 visual)
         if contagion_pct > 70:
-            edge_width = base_width * 1.5
+            edge_width = base_width * 1.6
+            edge_opacity = 0.9
             edge_dash = 'solid'
         elif contagion_pct > 40:
-            edge_width = base_width * 1.2
+            edge_width = base_width * 1.3
+            edge_opacity = 0.8
             edge_dash = 'solid'
         else:
             edge_width = base_width
+            edge_opacity = 0.7
             edge_dash = 'solid'
 
-        # Create edge trace
+        # Create edge trace with improved styling
+        # Convert color to rgba for opacity support
+        if edge_color == 'purple':
+            rgba_color = f'rgba(128, 0, 128, {edge_opacity})'
+        elif edge_color == 'dodgerblue':
+            rgba_color = f'rgba(30, 144, 255, {edge_opacity})'
+        elif edge_color == 'red':
+            rgba_color = f'rgba(220, 20, 60, {edge_opacity})'
+        elif edge_color == 'green':
+            rgba_color = f'rgba(46, 204, 113, {edge_opacity})'
+        else:
+            rgba_color = edge_color
+
         edge_trace = go.Scatter(
             x=[x0, x1, None],
             y=[y0, y1, None],
             mode='lines',
             line=dict(
                 width=edge_width,
-                color=edge_color,
+                color=rgba_color,
                 dash=edge_dash,
             ),
             hoverinfo='text',
@@ -299,25 +314,26 @@ def create_enhanced_graph_plotly(
         lcr = metrics.lcr_scores.get(name, float('inf'))
 
         # Determine node color based on SIM score with enhanced visibility
+        # Using vibrant, professional gradient colors
         if sim_score > 0.7:
-            # Critical SIFI - Dark Red
-            node_color = 'rgb(200, 0, 0)'
+            # Critical SIFI - Bright Red with depth
+            node_color = 'rgb(220, 20, 60)'  # Crimson
             importance = '🔴 CRITICAL SIFI'
         elif sim_score > 0.5:
-            # High SIFI - Red
-            node_color = 'rgb(255, 50, 50)'
+            # High SIFI - Coral Red
+            node_color = 'rgb(255, 99, 71)'  # Tomato
             importance = '🔴 HIGH SIFI'
         elif sim_score > 0.3:
-            # Moderately important - Orange
-            node_color = 'rgb(255, 150, 0)'
+            # Moderately important - Golden Orange
+            node_color = 'rgb(255, 165, 0)'  # Orange
             importance = '🟡 MODERATE'
         elif sim_score > 0.15:
-            # Low importance - Yellow-Green
-            node_color = 'rgb(200, 200, 0)'
+            # Low importance - Gold
+            node_color = 'rgb(255, 215, 0)'  # Gold
             importance = '🟡 LOW'
         else:
-            # Normal - Green
-            node_color = 'rgb(50, 200, 50)'
+            # Normal - Emerald Green
+            node_color = 'rgb(46, 204, 113)'  # Medium Sea Green
             importance = '🟢 NORMAL'
 
         # For NBFI nodes, show real AUM (balance is scaled for visualization)
@@ -355,24 +371,23 @@ def create_enhanced_graph_plotly(
         )
         node_text.append(hover_text)
 
-        # Size based on balance (reduced to prevent overlap)
+        # Size based on balance with better visibility
         # Use logarithmic scale for very large balances
         if abs(balance) > 0:
             import math
-            # Log scale for large values to prevent giant nodes
-            # More aggressive scaling to prevent overlap
-            size = 8 + 3 * math.log10(abs(balance) + 1)
-            node_sizes.append(min(size, 25))  # Cap at 25 pixels (reduced from 35)
+            # Log scale for large values - more generous sizing for better visibility
+            size = 15 + 5 * math.log10(abs(balance) + 1)
+            node_sizes.append(min(size, 45))  # Cap at 45 pixels for better visibility
         else:
-            node_sizes.append(12)  # Default size for zero balance
+            node_sizes.append(18)  # Default size for zero balance - larger for visibility
 
-        # Border: Red and thick if vulnerable
+        # Border: Red and thick if vulnerable, white for better contrast
         if name in vulnerable_set:
-            node_border_colors.append('darkred')
-            node_border_widths.append(6)
+            node_border_colors.append('rgb(139, 0, 0)')  # Dark red
+            node_border_widths.append(5)
         else:
-            node_border_colors.append('black')
-            node_border_widths.append(2)
+            node_border_colors.append('rgb(255, 255, 255)')  # White border for depth
+            node_border_widths.append(3)
 
         node_colors.append(node_color)
 
@@ -385,7 +400,7 @@ def create_enhanced_graph_plotly(
             label = f"⚠️ {node_name}"
         node_labels.append(label)
 
-    # Create node trace
+    # Create node trace with enhanced styling
     node_trace = go.Scatter(
         x=node_x,
         y=node_y,
@@ -394,10 +409,15 @@ def create_enhanced_graph_plotly(
         hovertext=node_text,
         text=node_labels,
         textposition="top center",
-        textfont=dict(size=9, color='black', family='Arial', weight='bold'),
+        textfont=dict(
+            size=11,  # Larger font for better readability
+            color='rgba(0, 0, 0, 0.9)',  # Slightly transparent black
+            family='Arial Black',  # Bolder font
+        ),
         marker=dict(
             size=node_sizes,
             color=node_colors,
+            opacity=0.95,  # Slight transparency for depth
             line=dict(
                 width=node_border_widths,
                 color=node_border_colors,
@@ -549,16 +569,16 @@ def create_enhanced_graph_plotly(
             'y': 0.98,
             'xanchor': 'center',
             'yanchor': 'top',
-            'font': dict(size=18, family='Arial Black', color=title_color)
+            'font': dict(size=20, family='Arial Black', color=title_color)  # Larger title
         },
         showlegend=False,
         hovermode='closest',
-        margin=dict(b=50, l=50, r=260, t=140),  # Increased top margin for clean title area
+        margin=dict(b=60, l=60, r=280, t=150),  # More margin for better spacing
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, scaleanchor="x", scaleratio=1),
-        plot_bgcolor='rgba(245, 245, 250, 1)',  # Subtle blue-grey background
+        plot_bgcolor='rgba(250, 250, 255, 1)',  # Very light blue background - more subtle
         paper_bgcolor='rgba(255, 255, 255, 1)',
-        height=900,  # Increased height for better spacing
+        height=1000,  # Increased height for better spacing with larger nodes
         annotations=annotations
     )
 
@@ -589,29 +609,29 @@ def _compute_enhanced_layout(G: nx.DiGraph) -> Dict[str, Tuple[float, float]]:
     core_nodes = {'Fed', 'Treasury', 'Banks'}
     nbfi_nodes = {'Hedge_Funds', 'Asset_Managers', 'Insurance_Pensions'}
 
-    # Manual positions for better visualization
+    # Manual positions for better visualization with more spacing
     pos = {}
 
-    # Core nodes in center triangle (wider spacing)
+    # Core nodes in center triangle (wider spacing for better visibility)
     if 'Fed' in G.nodes():
-        pos['Fed'] = (0, 1.5)
+        pos['Fed'] = (0, 2.0)  # Increased from 1.5
     if 'Treasury' in G.nodes():
-        pos['Treasury'] = (-1.2, 0)
+        pos['Treasury'] = (-1.8, 0)  # Increased from -1.2
     if 'Banks' in G.nodes():
-        pos['Banks'] = (1.2, 0)
+        pos['Banks'] = (1.8, 0)  # Increased from 1.2
 
-    # NBFI nodes on outer circle (larger radius to avoid overlap)
+    # NBFI nodes on outer circle (much larger radius to avoid overlap with bigger nodes)
     nbfi_present = [n for n in nbfi_nodes if n in G.nodes()]
     nbfi_count = len(nbfi_present)
     for i, node in enumerate(nbfi_present):
         angle = 2 * math.pi * i / nbfi_count + math.pi / 2
-        pos[node] = (4 * math.cos(angle), 4 * math.sin(angle))
+        pos[node] = (5.5 * math.cos(angle), 5.5 * math.sin(angle))  # Increased from 4
 
-    # Other nodes on middle circle (larger radius)
+    # Other nodes on middle circle (larger radius for better spacing)
     other_nodes = [n for n in G.nodes() if n not in core_nodes and n not in nbfi_nodes]
     other_count = len(other_nodes)
     for i, node in enumerate(other_nodes):
         angle = 2 * math.pi * i / max(other_count, 1)
-        pos[node] = (2.5 * math.cos(angle), 2.5 * math.sin(angle))
+        pos[node] = (3.5 * math.cos(angle), 3.5 * math.sin(angle))  # Increased from 2.5
 
     return pos
