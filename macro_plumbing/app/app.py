@@ -666,16 +666,26 @@ if st.session_state.get('run_analysis', False):
 
             # Expandable tables
             with st.expander("📊 Ver Tablas Detalladas"):
-                # Use enhanced graph if available, otherwise fallback to standard graph
-                graph_to_display = enhanced_graph if show_enhanced and enhanced_graph is not None else graph
-                nodes_df, edges_df = graph_to_display.to_dataframe()
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.subheader("Nodes" + (" (Enhanced with NBFI)" if show_enhanced else ""))
-                    st.dataframe(nodes_df, use_container_width=True)
-                with col2:
-                    st.subheader("Edges" + (" (with Contagion)" if show_enhanced else ""))
-                    st.dataframe(edges_df, use_container_width=True)
+                try:
+                    # Use enhanced graph if available, otherwise fallback to standard graph
+                    graph_to_display = enhanced_graph if show_enhanced and enhanced_graph is not None else graph
+
+                    if graph_to_display is None:
+                        st.error("No graph available to display")
+                    elif not hasattr(graph_to_display, 'to_dataframe'):
+                        st.error(f"Graph type {type(graph_to_display).__name__} doesn't have to_dataframe method")
+                    else:
+                        nodes_df, edges_df = graph_to_display.to_dataframe()
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.subheader("Nodes" + (" (Enhanced with NBFI)" if show_enhanced else ""))
+                            st.dataframe(nodes_df, use_container_width=True)
+                        with col2:
+                            st.subheader("Edges" + (" (with Contagion)" if show_enhanced else ""))
+                            st.dataframe(edges_df, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error displaying tables: {e}")
+                    st.exception(e)
 
         # Subtab 2: Markov Dynamics
         with subtab2:
