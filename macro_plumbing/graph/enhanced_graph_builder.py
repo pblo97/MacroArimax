@@ -238,9 +238,43 @@ class EnhancedLiquidityGraph:
 
     def _add_core_edges(self):
         """Add core liquidity flow edges."""
-        # Fed → Banks (reserves)
-        reserves = self.df.get('RESERVES', pd.Series(0)).fillna(0)
-        delta_res = reserves.diff().iloc[-1] if len(reserves) > 1 else 0
+        # Helper to safely get latest value from a column
+        def safe_get_latest(col_name, fallback_col=None):
+            """
+            Get latest value from column, with optional fallback.
+
+            Uses pre-computed delta columns if available (delta_reserves, delta_tga, etc.)
+            Otherwise calculates from raw series.
+            """
+            # Try the column first
+            if col_name in self.df.columns:
+                series = self.df[col_name].dropna()
+                if len(series) > 0:
+                    value = series.iloc[-1]
+                    # Debug: show if value is very small/zero
+                    if abs(value) < 0.01:
+                        print(f"ℹ️  {col_name}: value={value:.4f} (near zero)")
+                    return value
+                else:
+                    print(f"⚠️  Warning: {col_name} exists but all NaN")
+                    return 0
+
+            # Try fallback calculation
+            if fallback_col and fallback_col in self.df.columns:
+                series = self.df[fallback_col].dropna()
+                if len(series) >= 2:
+                    delta = series.diff().iloc[-1]
+                    print(f"ℹ️  {col_name} not found, computed from {fallback_col}: {delta:.4f}")
+                    return delta
+                else:
+                    print(f"⚠️  Warning: {fallback_col} has < 2 points, cannot compute {col_name}")
+                    return 0
+
+            print(f"⚠️  Warning: {col_name} not in dataframe, using default=0")
+            return 0
+
+        # Fed → Banks (reserves) - use pre-computed delta_reserves
+        delta_res = safe_get_latest('delta_reserves', fallback_col='RESERVES')
 
         self.G.add_edge(
             'Fed',
@@ -251,9 +285,8 @@ class EnhancedLiquidityGraph:
             abs_flow=abs(delta_res)
         )
 
-        # Treasury → Banks (TGA)
-        tga = self.df.get('TGA', pd.Series(0)).fillna(0)
-        delta_tga = tga.diff().iloc[-1] if len(tga) > 1 else 0
+        # Treasury → Banks (TGA) - use pre-computed delta_tga
+        delta_tga = safe_get_latest('delta_tga', fallback_col='TGA')
 
         self.G.add_edge(
             'Treasury',
@@ -264,9 +297,8 @@ class EnhancedLiquidityGraph:
             abs_flow=abs(delta_tga)
         )
 
-        # MMFs → Fed (RRP)
-        rrp = self.df.get('RRP', pd.Series(0)).fillna(0)
-        delta_rrp = rrp.diff().iloc[-1] if len(rrp) > 1 else 0
+        # MMFs → Fed (RRP) - use pre-computed delta_rrp
+        delta_rrp = safe_get_latest('delta_rrp', fallback_col='RRP')
 
         self.G.add_edge(
             'MMFs',
@@ -277,18 +309,8 @@ class EnhancedLiquidityGraph:
             abs_flow=abs(delta_rrp)
         )
 
-        # Banks ↔ Dealers (repo)
-        tgcr = self.df.get('TGCR', pd.Series(0)).fillna(0)
-        delta_tgcr = tgcr.diff().iloc[-1] if len(tgcr) > 1 else 0
-
-        self.G.add_edge(
-            'Banks',
-            'Dealers',
-            flow=delta_tgcr,
-            driver='ΔTGCR',
-            is_drain=delta_tgcr > 0,
-            abs_flow=abs(delta_tgcr)
-        )
+        # Note: Banks→Dealers edge is created in _add_margin_call_edges() with ΔIM
+        # TGCR is a rate, not a flow, so we don't create an edge based on it here
 
     def _add_margin_call_edges(self):
         """Add margin call edges (Phase 1)."""
@@ -300,11 +322,19 @@ class EnhancedLiquidityGraph:
             im_latest = delta_im.iloc[-1]
         else:
             im_latest = 0
+            print("⚠️  Warning: delta_im (Initial Margin) is empty, using 0")
 
         if len(vm) > 0:
             vm_latest = vm.iloc[-1]
         else:
             vm_latest = 0
+            print("⚠️  Warning: vm (Variation Margin) is empty, using 0")
+
+        # Debug output
+        if abs(im_latest) < 0.01:
+            print(f"ℹ️  ΔIM: {im_latest:.4f} $M (near zero)")
+        if abs(vm_latest) < 0.01:
+            print(f"ℹ️  VM: {vm_latest:.4f} $M (near zero)")
 
         # Banks → Dealers (Initial Margin)
         self.G.add_edge(
