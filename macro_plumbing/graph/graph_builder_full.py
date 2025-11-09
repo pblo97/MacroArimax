@@ -40,7 +40,7 @@ def detect_quarter_end(dates: pd.DatetimeIndex, window: int = 3) -> pd.Series:
     return is_qtr_end
 
 
-def get_weekly_delta(series: pd.Series, lookback: int = 7) -> float:
+def get_weekly_delta(series: pd.Series, lookback: int = 14) -> float:
     """
     Get latest meaningful delta for weekly series (RESERVES, TGA).
 
@@ -52,7 +52,7 @@ def get_weekly_delta(series: pd.Series, lookback: int = 7) -> float:
     series : pd.Series
         Time series (e.g., RESERVES, TGA)
     lookback : int
-        Days to look back for non-zero change (default 7)
+        Days to look back for non-zero change (default 14 = ~2 weeks, ensures 2 Wednesdays)
 
     Returns
     -------
@@ -484,7 +484,7 @@ def build_complete_liquidity_graph(df: pd.DataFrame, quarter_end_relax: bool = T
 
     # 2. Fed → Banks (driver: +ΔReserves = injection)
     # RESERVES is weekly series (updates Wednesdays) - use specialized functions
-    delta_res = get_weekly_delta(reserves, lookback=7)
+    delta_res = get_weekly_delta(reserves, lookback=14)
     w_res = zscore_weekly(reserves, window=252)
     w_res = np.clip(w_res * qtr_multiplier, -5, 5)
     graph.add_edge_data(GraphEdge(
@@ -499,7 +499,7 @@ def build_complete_liquidity_graph(df: pd.DataFrame, quarter_end_relax: bool = T
 
     # 3. Treasury → Banks (driver: +ΔTGA = drain from banks)
     # TGA is weekly series (updates Wednesdays) - use specialized functions
-    delta_tga = get_weekly_delta(tga, lookback=7)
+    delta_tga = get_weekly_delta(tga, lookback=14)
     w_tga = -zscore_weekly(tga, window=252)  # Negative because +ΔTGA = drain
     w_tga = np.clip(w_tga * qtr_multiplier, -5, 5)
     graph.add_edge_data(GraphEdge(

@@ -239,7 +239,7 @@ class EnhancedLiquidityGraph:
     def _add_core_edges(self):
         """Add core liquidity flow edges."""
         # Helper to safely get latest meaningful flow value
-        def safe_get_latest(col_name, fallback_col=None, lookback=7):
+        def safe_get_latest(col_name, fallback_col=None, lookback=14):
             """
             Get latest meaningful flow value from column.
 
@@ -248,6 +248,9 @@ class EnhancedLiquidityGraph:
 
             Uses pre-computed delta columns if available (delta_reserves, delta_tga, etc.)
             Otherwise calculates from raw series.
+
+            IMPORTANT: Lookback=14 days ensures we capture at least 2 Wednesdays
+            (in case the most recent Wednesday had no change).
             """
             # Try the pre-computed delta column first
             if col_name in self.df.columns:
