@@ -182,9 +182,20 @@ def create_enhanced_graph_plotly(
     # Extract vulnerable nodes for highlighting
     vulnerable_set = {node for node, _, _, _ in metrics.vulnerable_nodes}
 
-    # Create edge traces with type-based coloring
+    # Create edge traces with type-based coloring and contagion risk
     edge_traces = []
     edge_types_seen = set()
+
+    # Calculate contagion contribution for each edge (Phase 4)
+    edge_contagion_scores = {}
+    for edge in graph.G.edges(data=True):
+        source, target, attrs = edge
+        source_stress = graph.G.nodes.get(source, {}).get('stress_prob', 0.5)
+        flow = abs(attrs.get('flow', 0))
+        # Simple contagion proxy: stress * flow
+        edge_contagion_scores[(source, target)] = source_stress * flow
+
+    max_contagion = max(edge_contagion_scores.values()) if edge_contagion_scores else 1
 
     for edge in graph.G.edges(data=True):
         source, target, attrs = edge
@@ -197,24 +208,39 @@ def create_enhanced_graph_plotly(
         z_score = attrs.get('z_score', 0)
         edge_family = attrs.get('family', 'unknown')
 
+        # Get contagion risk for this edge (Phase 4 metric)
+        contagion_score = edge_contagion_scores.get((source, target), 0)
+        contagion_pct = (contagion_score / max_contagion * 100) if max_contagion > 0 else 0
+
         # Determine edge type and color
         if 'Margin' in driver or 'IM' in driver or 'VM' in driver:
             edge_color = 'purple'
-            edge_type = 'Margin Call'
+            edge_type = '🟣 Margin Call'
         elif any(nbfi in source or nbfi in target for nbfi in ['Hedge_Funds', 'Asset_Managers', 'Insurance_Pensions']):
             edge_color = 'dodgerblue'
-            edge_type = 'NBFI Flow'
+            edge_type = '🔵 NBFI Flow'
         elif is_drain:
             edge_color = 'red'
-            edge_type = 'Drenaje'
+            edge_type = '🔴 Drenaje'
         else:
             edge_color = 'green'
-            edge_type = 'Inyección'
+            edge_type = '🟢 Inyección'
 
         edge_types_seen.add(edge_type)
 
         # Width based on flow magnitude (reduced for cleaner look)
-        edge_width = min(abs(flow) / 100 + 1, 5)
+        base_width = min(abs(flow) / 100 + 1, 5)
+
+        # Increase width for high-contagion edges (Phase 4 visual)
+        if contagion_pct > 70:
+            edge_width = base_width * 1.5
+            edge_dash = 'solid'
+        elif contagion_pct > 40:
+            edge_width = base_width * 1.2
+            edge_dash = 'solid'
+        else:
+            edge_width = base_width
+            edge_dash = 'solid'
 
         # Create edge trace
         edge_trace = go.Scatter(
@@ -224,6 +250,7 @@ def create_enhanced_graph_plotly(
             line=dict(
                 width=edge_width,
                 color=edge_color,
+                dash=edge_dash,
             ),
             hoverinfo='text',
             hovertext=(
@@ -232,7 +259,9 @@ def create_enhanced_graph_plotly(
                 f"Flow: ${flow:.1f}B<br>"
                 f"Z-score: {z_score:.2f}<br>"
                 f"Driver: {driver}<br>"
-                f"Family: {edge_family}"
+                f"Family: {edge_family}<br>"
+                f"<br><b>🔴 PHASE 4:</b><br>"
+                f"Contagion Risk: {contagion_pct:.1f}%"
             ),
             showlegend=False,
         )
@@ -269,19 +298,27 @@ def create_enhanced_graph_plotly(
         sim_score = metrics.sim_scores.get(name, 0.0)
         lcr = metrics.lcr_scores.get(name, float('inf'))
 
-        # Determine node color based on SIM score
-        if sim_score > 0.5:
-            # Systemically important - red shades
-            node_color = f'rgb({int(255 * sim_score)}, 0, 0)'
-            importance = '🔴 SIFI'
+        # Determine node color based on SIM score with enhanced visibility
+        if sim_score > 0.7:
+            # Critical SIFI - Dark Red
+            node_color = 'rgb(200, 0, 0)'
+            importance = '🔴 CRITICAL SIFI'
+        elif sim_score > 0.5:
+            # High SIFI - Red
+            node_color = 'rgb(255, 50, 50)'
+            importance = '🔴 HIGH SIFI'
         elif sim_score > 0.3:
-            # Moderately important - orange
-            node_color = f'rgb(255, {int(165 * (1 - sim_score))}, 0)'
-            importance = '🟡 Moderately Important'
+            # Moderately important - Orange
+            node_color = 'rgb(255, 150, 0)'
+            importance = '🟡 MODERATE'
+        elif sim_score > 0.15:
+            # Low importance - Yellow-Green
+            node_color = 'rgb(200, 200, 0)'
+            importance = '🟡 LOW'
         else:
-            # Normal - green shades
-            node_color = f'rgb(0, {int(200 * (1 - sim_score))}, 0)'
-            importance = '🟢 Normal'
+            # Normal - Green
+            node_color = 'rgb(50, 200, 50)'
+            importance = '🟢 NORMAL'
 
         # For NBFI nodes, show real AUM (balance is scaled for visualization)
         NBFI_SCALE_FACTOR = 0.1
@@ -339,6 +376,15 @@ def create_enhanced_graph_plotly(
 
         node_colors.append(node_color)
 
+    # Prepare node labels with vulnerability warnings
+    node_labels = []
+    for node_name in graph.G.nodes():
+        label = node_name
+        # Add warning symbol for vulnerable nodes
+        if node_name in vulnerable_set:
+            label = f"⚠️ {node_name}"
+        node_labels.append(label)
+
     # Create node trace
     node_trace = go.Scatter(
         x=node_x,
@@ -346,9 +392,9 @@ def create_enhanced_graph_plotly(
         mode='markers+text',
         hoverinfo='text',
         hovertext=node_text,
-        text=[node[0] for node in graph.G.nodes(data=True)],
+        text=node_labels,
         textposition="top center",
-        textfont=dict(size=9, color='black', family='Arial'),
+        textfont=dict(size=9, color='black', family='Arial', weight='bold'),
         marker=dict(
             size=node_sizes,
             color=node_colors,
@@ -363,68 +409,132 @@ def create_enhanced_graph_plotly(
     # Create figure
     fig = go.Figure(data=edge_traces + [node_trace])
 
-    # Build legend text
+    # Build legend with enhanced Phase 4 section
     legend_parts = [
-        "<b>Enhanced Liquidity Network (4 Phases)</b>",
+        "<b>Enhanced Liquidity Network</b>",
+        "<b>(4-Phase Analysis)</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
         "",
-        "<b>Node Colors (SIM Score):</b>",
-        "🔴 Red: Systemically Important (SIM > 0.5)",
-        "🟡 Orange: Moderately Important (0.3 < SIM < 0.5)",
-        "🟢 Green: Normal (SIM < 0.3)",
+        "<b>🔴 PHASE 4: ADVANCED METRICS</b>",
         "",
-        "<b>Node Borders:</b>",
-        "⚠️ Thick Red: Vulnerable (SIFI + Low LCR)",
+        "<b>Systemic Risk Scores:</b>",
+        f"  • Contagion Index: {metrics.contagion_index:.2f}",
+        f"  • Network Resilience: {metrics.network_resilience:.1%}",
+        f"  • NBFI Systemic: {metrics.nbfi_systemic_score:+.2f}σ",
         "",
-        "<b>Edge Colors:</b>",
-        "🟣 Purple: Margin Calls (Phase 1)",
-        "🔵 Blue: NBFI Flows (Phase 2)",
-        "🔴 Red: Draining",
-        "🟢 Green: Injecting",
-        "",
-        "<b>Metrics:</b>",
-        f"Margin Stress: {metrics.margin_stress_index:.2f}",
-        f"NBFI Systemic: {metrics.nbfi_systemic_score:.2f}",
-        f"Network Density: {metrics.density:.1%}",
-        f"Contagion Index: {metrics.contagion_index:.1f}",
-        f"Resilience: {metrics.network_resilience:.1%}",
+        "<b>Top SIFIs (by SIM):</b>",
     ]
 
+    # Add top 3 SIFIs
+    sorted_sim = sorted(metrics.sim_scores.items(), key=lambda x: x[1], reverse=True)[:3]
+    for node, sim in sorted_sim:
+        legend_parts.append(f"  🔴 {node}: {sim:.3f}")
+
+    legend_parts.extend([
+        "",
+        "<b>Vulnerable Nodes:</b>",
+    ])
+
     if vulnerable_set:
-        legend_parts.extend([
-            "",
-            f"⚠️ {len(vulnerable_set)} Vulnerable Nodes Detected"
-        ])
+        legend_parts.append(f"  ⚠️ {len(vulnerable_set)} nodes at risk")
+        for node, reason, lcr, sim in metrics.vulnerable_nodes[:2]:  # Top 2
+            legend_parts.append(f"  • {node}: LCR={lcr:.2f}")
+    else:
+        legend_parts.append("  ✅ No vulnerable nodes")
+
+    legend_parts.extend([
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "<b>📊 SIM-BASED COLORS:</b>",
+        "🔴 Dark Red: Critical (>0.7)",
+        "🔴 Red: High SIFI (>0.5)",
+        "🟡 Orange: Moderate (>0.3)",
+        "🟡 Yellow: Low (>0.15)",
+        "🟢 Green: Normal (<0.15)",
+        "⚠️ + Red Border: Vulnerable",
+        "",
+        "<b>🔗 EDGE TYPES:</b>",
+        "🟣 Margin Calls (Phase 1)",
+        "🔵 NBFI Flows (Phase 2)",
+        "🔴 Draining | 🟢 Injecting",
+        "💥 Thicker = Higher Contagion",
+        "",
+        "<b>📈 NETWORK METRICS:</b>",
+        f"Margin Stress: {metrics.margin_stress_index:+.2f}σ",
+        f"Network Density: {metrics.density:.1%}",
+    ])
 
     legend_text = "<br>".join(legend_parts)
 
+    # Prepare annotations list
+    annotations = [
+        # Main legend
+        dict(
+            text=legend_text,
+            xref="paper", yref="paper",
+            x=1.02, y=0.5,
+            xanchor="left", yanchor="middle",
+            showarrow=False,
+            font=dict(size=9, family="monospace"),
+            align="left",
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="red" if vulnerable_set else "black",
+            borderwidth=2,
+            borderpad=10,
+        )
+    ]
+
+    # Add Phase 4 alert banner if there are vulnerable nodes
+    if vulnerable_set:
+        annotations.append(
+            dict(
+                text=f"<b>⚠️ PHASE 4 ALERT: {len(vulnerable_set)} VULNERABLE NODE(S)</b>",
+                xref="paper", yref="paper",
+                x=0.5, y=1.05,
+                xanchor="center", yanchor="bottom",
+                showarrow=False,
+                font=dict(size=12, family="Arial", color="red"),
+                bgcolor="rgba(255, 255, 0, 0.3)",
+                bordercolor="red",
+                borderwidth=2,
+                borderpad=5,
+            )
+        )
+
+    # Add contagion risk indicator
+    contagion_color = "red" if metrics.contagion_index > 100 else "orange" if metrics.contagion_index > 50 else "green"
+    contagion_status = "HIGH" if metrics.contagion_index > 100 else "MEDIUM" if metrics.contagion_index > 50 else "LOW"
+
+    annotations.append(
+        dict(
+            text=f"<b>Contagion Risk: {contagion_status}</b><br>Index: {metrics.contagion_index:.1f}",
+            xref="paper", yref="paper",
+            x=0.02, y=0.98,
+            xanchor="left", yanchor="top",
+            showarrow=False,
+            font=dict(size=10, family="monospace", color=contagion_color),
+            bgcolor="rgba(255, 255, 255, 0.9)",
+            bordercolor=contagion_color,
+            borderwidth=2,
+            borderpad=5,
+        )
+    )
+
     fig.update_layout(
         title={
-            'text': "Enhanced Liquidity Network Graph<br><sub>Comprehensive Analysis (4 Phases) - Hover for Details</sub>",
+            'text': "Enhanced Liquidity Network - PHASE 4 ANALYSIS<br><sub>🔴 SIM-based Risk | ⚠️ Vulnerable Nodes | 🟣 Margin Stress | 🔵 NBFI Flows</sub>",
             'x': 0.5,
-            'xanchor': 'center'
+            'xanchor': 'center',
+            'font': dict(size=16, family='Arial Black')
         },
         showlegend=False,
         hovermode='closest',
-        margin=dict(b=40, l=40, r=200, t=80),  # More margin for legend
+        margin=dict(b=40, l=40, r=240, t=120),  # More margin for legend and title
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, scaleanchor="x", scaleratio=1),  # Equal aspect ratio
-        plot_bgcolor='white',
-        height=800,  # Taller graph
-        annotations=[
-            dict(
-                text=legend_text,
-                xref="paper", yref="paper",
-                x=1.02, y=0.5,
-                xanchor="left", yanchor="middle",
-                showarrow=False,
-                font=dict(size=9, family="monospace"),
-                align="left",
-                bgcolor="rgba(255, 255, 255, 0.9)",
-                bordercolor="black",
-                borderwidth=1,
-                borderpad=10,
-            )
-        ]
+        plot_bgcolor='rgba(250, 250, 250, 1)',  # Light grey background
+        height=850,  # Taller graph
+        annotations=annotations
     )
 
     return fig
