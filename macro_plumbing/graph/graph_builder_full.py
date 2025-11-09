@@ -40,6 +40,86 @@ def detect_quarter_end(dates: pd.DatetimeIndex, window: int = 3) -> pd.Series:
     return is_qtr_end
 
 
+def get_weekly_delta(series: pd.Series, lookback: int = 7) -> float:
+    """
+    Get latest meaningful delta for weekly series (RESERVES, TGA).
+
+    Weekly series only update on Wednesdays. On other days, .diff() returns 0.
+    This function looks back up to `lookback` days to find the last non-zero change.
+
+    Parameters
+    ----------
+    series : pd.Series
+        Time series (e.g., RESERVES, TGA)
+    lookback : int
+        Days to look back for non-zero change (default 7)
+
+    Returns
+    -------
+    float
+        Latest non-zero delta, or 0 if none found
+    """
+    if len(series) < 2:
+        return 0.0
+
+    deltas = series.diff().fillna(0)
+    tail = deltas.tail(lookback)
+    non_zero = tail[tail.abs() > 0.01]
+
+    if len(non_zero) > 0:
+        return float(non_zero.iloc[-1])
+    else:
+        return 0.0
+
+
+def zscore_weekly(series: pd.Series, window: int = 252) -> float:
+    """
+    Compute z-score for weekly series using only non-zero values.
+
+    For weekly series (RESERVES, TGA), calculating z-score with all values
+    creates bias: 80% of values are 0 (non-Wednesday days).
+
+    Solution: Calculate z-score using only non-zero deltas (actual updates).
+
+    Parameters
+    ----------
+    series : pd.Series
+        Time series
+    window : int
+        Rolling window in days (default 252)
+
+    Returns
+    -------
+    float
+        Z-score based on non-zero values only
+    """
+    if len(series) < 30:
+        return 0.0
+
+    deltas = series.diff().fillna(0)
+
+    # Filter to non-zero values only (actual weekly updates)
+    non_zero_deltas = deltas[deltas.abs() > 0.01]
+
+    if len(non_zero_deltas) < 10:
+        return 0.0
+
+    # Use last N non-zero values (approximately window/5 since weekly)
+    n_weeks = min(len(non_zero_deltas), window // 5)
+    recent = non_zero_deltas.tail(n_weeks)
+
+    mean = recent.mean()
+    std = recent.std()
+
+    if std == 0 or pd.isna(std):
+        return 0.0
+
+    # Get latest non-zero value
+    latest = non_zero_deltas.iloc[-1] if len(non_zero_deltas) > 0 else 0
+
+    return float((latest - mean) / std)
+
+
 @dataclass
 class GraphNode:
     """Extended liquidity graph node."""
@@ -108,20 +188,67 @@ class CompleteLiquidityGraph:
         """
         Validate reserve identity:
         ΔReserves ≈ -ΔTGA - ΔONRRP + ΔAssetsFedNet + error
+
+        IMPORTANT: RESERVES and TGA are weekly series (update Wednesdays).
+        Identity is only meaningful on Wednesdays or using weekly changes.
+        On other days, delta_reserves = delta_tga = 0, making validation meaningless.
+
+        This method filters to Wednesdays only for meaningful validation.
         """
-        df = pd.DataFrame({
-            'delta_reserves': data.get('delta_reserves', 0),
-            'delta_tga': data.get('delta_tga', 0),
-            'delta_rrp': data.get('delta_rrp', 0),
-            'delta_walcl': data.get('delta_walcl', 0)
-        })
+        # Extract series (not just scalars)
+        reserves_series = data.get('reserves', pd.Series([]))
+        tga_series = data.get('tga', pd.Series([]))
+        rrp_series = data.get('rrp', pd.Series([]))
+        walcl_series = data.get('walcl', pd.Series([]))
 
-        # Simplified identity (missing some components)
-        df['predicted_delta_reserves'] = -df['delta_tga'] - df['delta_rrp']
-        df['residual'] = df['delta_reserves'] - df['predicted_delta_reserves']
-        df['residual_pct'] = df['residual'] / df['delta_reserves'].abs().replace(0, np.nan)
+        # If we have series, filter to Wednesdays only
+        if isinstance(reserves_series, pd.Series) and len(reserves_series) > 0:
+            # Filter to Wednesdays (day 2)
+            wednesdays = reserves_series.index[reserves_series.index.dayofweek == 2]
 
-        return df
+            if len(wednesdays) > 1:
+                # Calculate deltas on Wednesdays only
+                delta_reserves = reserves_series.loc[wednesdays].diff()
+                delta_tga = tga_series.loc[wednesdays].diff() if len(tga_series) > 0 else pd.Series(0, index=wednesdays)
+                delta_rrp = rrp_series.loc[wednesdays].diff() if len(rrp_series) > 0 else pd.Series(0, index=wednesdays)
+                delta_walcl = walcl_series.loc[wednesdays].diff() if len(walcl_series) > 0 else pd.Series(0, index=wednesdays)
+
+                df = pd.DataFrame({
+                    'delta_reserves': delta_reserves,
+                    'delta_tga': delta_tga,
+                    'delta_rrp': delta_rrp,
+                    'delta_walcl': delta_walcl
+                })
+
+                # Simplified identity (missing some components)
+                df['predicted_delta_reserves'] = -df['delta_tga'] - df['delta_rrp']
+                df['residual'] = df['delta_reserves'] - df['predicted_delta_reserves']
+                df['residual_pct'] = df['residual'] / df['delta_reserves'].abs().replace(0, np.nan)
+
+                return df.tail(10)  # Last 10 Wednesdays
+            else:
+                # Not enough Wednesday data
+                return pd.DataFrame({
+                    'delta_reserves': [0],
+                    'delta_tga': [0],
+                    'delta_rrp': [0],
+                    'residual': [0],
+                    'note': ['Insufficient Wednesday data for validation']
+                })
+        else:
+            # Fallback: scalar values (backward compatibility)
+            df = pd.DataFrame({
+                'delta_reserves': [data.get('delta_reserves', 0)],
+                'delta_tga': [data.get('delta_tga', 0)],
+                'delta_rrp': [data.get('delta_rrp', 0)],
+                'delta_walcl': [data.get('delta_walcl', 0)]
+            })
+
+            df['predicted_delta_reserves'] = -df['delta_tga'] - df['delta_rrp']
+            df['residual'] = df['delta_reserves'] - df['predicted_delta_reserves']
+            df['residual_pct'] = df['residual'] / df['delta_reserves'].abs().replace(0, np.nan)
+
+            return df
 
     def compute_stress_flow_index(self) -> float:
         """
@@ -356,28 +483,30 @@ def build_complete_liquidity_graph(df: pd.DataFrame, quarter_end_relax: bool = T
     ))
 
     # 2. Fed → Banks (driver: +ΔReserves = injection)
-    delta_res = reserves.diff().fillna(0)
-    w_res = zscore_rolling(delta_res, 252).iloc[-1] if len(delta_res) > 30 else 0
+    # RESERVES is weekly series (updates Wednesdays) - use specialized functions
+    delta_res = get_weekly_delta(reserves, lookback=7)
+    w_res = zscore_weekly(reserves, window=252)
     w_res = np.clip(w_res * qtr_multiplier, -5, 5)
     graph.add_edge_data(GraphEdge(
         source='Fed',
         target='Banks',
-        flow=delta_res.iloc[-1] if len(delta_res) > 0 else 0,
-        driver=f"ΔReserves={delta_res.iloc[-1]:.0f}B",
+        flow=delta_res,
+        driver=f"ΔReserves={delta_res:.0f}B",
         z_score=w_res,
         is_drain=w_res < 0,
         weight=abs(w_res)
     ))
 
     # 3. Treasury → Banks (driver: +ΔTGA = drain from banks)
-    delta_tga = tga.diff().fillna(0)
-    w_tga = -zscore_rolling(delta_tga, 252).iloc[-1] if len(delta_tga) > 30 else 0
+    # TGA is weekly series (updates Wednesdays) - use specialized functions
+    delta_tga = get_weekly_delta(tga, lookback=7)
+    w_tga = -zscore_weekly(tga, window=252)  # Negative because +ΔTGA = drain
     w_tga = np.clip(w_tga * qtr_multiplier, -5, 5)
     graph.add_edge_data(GraphEdge(
         source='Treasury',
         target='Banks',
-        flow=delta_tga.iloc[-1] if len(delta_tga) > 0 else 0,
-        driver=f"ΔTGA={delta_tga.iloc[-1]:.0f}B",
+        flow=delta_tga,
+        driver=f"ΔTGA={delta_tga:.0f}B",
         z_score=w_tga,
         is_drain=w_tga < 0,
         weight=abs(w_tga)
@@ -473,12 +602,12 @@ def build_complete_liquidity_graph(df: pd.DataFrame, quarter_end_relax: bool = T
     graph.stress_flow_index = graph.compute_stress_flow_index()
     graph.hotspots = graph.identify_hotspots(threshold=1.5)
 
-    # Validate reserve identity
+    # Validate reserve identity (pass full series for Wednesday filtering)
     reserve_data = {
-        'delta_reserves': delta_res,
-        'delta_tga': delta_tga,
-        'delta_rrp': delta_rrp,
-        'delta_walcl': df.get('WALCL', pd.Series(0)).diff().fillna(0)
+        'reserves': reserves,
+        'tga': tga,
+        'rrp': rrp,
+        'walcl': df.get('WALCL', pd.Series(0))
     }
     graph.reserve_identity = graph.validate_reserve_identity(reserve_data)
 
