@@ -494,6 +494,49 @@ class EnhancedLiquidityGraph:
         largest = max(components, key=len)
         return len(largest) / self.G.number_of_nodes()
 
+    def to_dataframe(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Export graph to DataFrames for analysis.
+
+        Returns
+        -------
+        tuple
+            (nodes_df, edges_df)
+        """
+        # Nodes DataFrame
+        nodes_list = []
+        for node_name in self.G.nodes():
+            node_data = self.G.nodes[node_name]
+            nodes_list.append({
+                'node': node_name,
+                'type': node_data.get('type', 'unknown'),
+                'balance': node_data.get('balance', 0),
+                'delta_1d': node_data.get('delta_1d', 0),
+                'delta_5d': node_data.get('delta_5d', 0),
+                'z_score': node_data.get('z_score', 0),
+                'percentile': node_data.get('percentile', 0),
+                'stress_prob': node_data.get('stress_prob', 0.5)
+            })
+
+        nodes_df = pd.DataFrame(nodes_list)
+
+        # Edges DataFrame
+        edges_list = []
+        for source, target, edge_data in self.G.edges(data=True):
+            edges_list.append({
+                'source': source,
+                'target': target,
+                'flow': edge_data.get('flow', 0),
+                'driver': edge_data.get('driver', ''),
+                'z_score': edge_data.get('z_score', 0),
+                'is_drain': edge_data.get('is_drain', False),
+                'abs_flow': edge_data.get('abs_flow', 0)
+            })
+
+        edges_df = pd.DataFrame(edges_list)
+
+        return nodes_df, edges_df
+
     def summary(self) -> str:
         """Generate summary report."""
         if self.metrics is None:
