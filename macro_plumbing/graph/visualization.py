@@ -525,14 +525,14 @@ def create_enhanced_graph_plotly(
         )
     )
 
-    # Add Phase 4 alert banner if there are vulnerable nodes (below title, not over it)
+    # Add Phase 4 alert banner if there are vulnerable nodes (bottom center to avoid node overlap)
     if vulnerable_set:
         annotations.append(
             dict(
                 text=f"<b>⚠️ ALERT: {len(vulnerable_set)} VULNERABLE NODE(S) DETECTED</b>",
                 xref="paper", yref="paper",
-                x=0.5, y=0.985,
-                xanchor="center", yanchor="top",
+                x=0.5, y=0.02,
+                xanchor="center", yanchor="bottom",
                 showarrow=False,
                 font=dict(size=11, family="Arial Black", color="darkred"),
                 bgcolor="rgba(255, 200, 0, 0.9)",
