@@ -10,9 +10,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
 import sys
+import importlib
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Force reload of enhanced_graph_builder to ensure latest code is loaded
+# Critical: Ensures to_dataframe method is available
+if 'macro_plumbing.graph.enhanced_graph_builder' in sys.modules:
+    importlib.reload(sys.modules['macro_plumbing.graph.enhanced_graph_builder'])
 
 from macro_plumbing.data.fred_client import FREDClient
 from macro_plumbing.features.net_liquidity import compute_net_liquidity_components
@@ -673,7 +679,18 @@ if st.session_state.get('run_analysis', False):
                     if graph_to_display is None:
                         st.error("No graph available to display")
                     elif not hasattr(graph_to_display, 'to_dataframe'):
-                        st.error(f"Graph type {type(graph_to_display).__name__} doesn't have to_dataframe method")
+                        st.error(f"❌ Graph type `{type(graph_to_display).__name__}` doesn't have `to_dataframe` method")
+                        st.info("**Debug Info:**")
+                        st.write(f"- Graph type: `{type(graph_to_display).__module__}.{type(graph_to_display).__name__}`")
+                        st.write(f"- show_enhanced: {show_enhanced}")
+                        st.write(f"- enhanced_graph is None: {enhanced_graph is None}")
+
+                        # Show available methods
+                        methods = [m for m in dir(graph_to_display) if not m.startswith('_') and callable(getattr(graph_to_display, m))]
+                        st.write(f"- Available methods: {', '.join(methods[:10])}")
+
+                        # Suggest solution
+                        st.warning("**💡 Solution:** Please restart the Streamlit app completely to reload all modules")
                     else:
                         nodes_df, edges_df = graph_to_display.to_dataframe()
                         col1, col2 = st.columns(2)
