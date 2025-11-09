@@ -508,16 +508,16 @@ def create_enhanced_graph_plotly(
         )
     )
 
-    # Add resilience indicator in top-left (below contagion, but above graph area)
+    # Add resilience indicator in bottom-left (moved to avoid node overlap)
     resilience_color = "green" if metrics.network_resilience > 0.7 else "orange" if metrics.network_resilience > 0.4 else "red"
     annotations.append(
         dict(
             text=f"<b>Resilience:</b> {metrics.network_resilience:.1%}",
             xref="paper", yref="paper",
-            x=0.01, y=0.87,  # Changed from 0.91 to 0.87 (more separation)
-            xanchor="left", yanchor="top",
+            x=0.01, y=0.05,  # Moved to bottom-left to avoid overlapping with nodes
+            xanchor="left", yanchor="bottom",
             showarrow=False,
-            font=dict(size=9, family="Arial", color="white"),
+            font=dict(size=10, family="Arial", color="white"),
             bgcolor=resilience_color,
             bordercolor=resilience_color,
             borderwidth=2,
@@ -550,7 +550,7 @@ def create_enhanced_graph_plotly(
             x=1.01, y=0.5,
             xanchor="left", yanchor="middle",
             showarrow=False,
-            font=dict(size=9, family="Courier New"),
+            font=dict(size=12, family="Courier New"),
             align="left",
             bgcolor="rgba(255, 255, 255, 0.98)",
             bordercolor="red" if vulnerable_set else "darkblue",
