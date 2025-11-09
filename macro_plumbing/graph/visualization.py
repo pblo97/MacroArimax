@@ -283,8 +283,12 @@ def create_enhanced_graph_plotly(
             node_color = f'rgb(0, {int(200 * (1 - sim_score))}, 0)'
             importance = '🟢 Normal'
 
-        # Special handling for NBFI nodes
+        # For NBFI nodes, show real AUM (balance is scaled for visualization)
+        NBFI_SCALE_FACTOR = 0.1
         if name in nbfi_nodes:
+            real_aum = balance / NBFI_SCALE_FACTOR
+            balance_display = f"${real_aum:.1f}B (AUM)"
+
             if name == 'Hedge_Funds':
                 nbfi_info = f"<br><b>NBFI: Hedge Funds</b><br>Stress: {metrics.hedge_fund_stress:.1%}"
             elif name == 'Asset_Managers':
@@ -294,6 +298,7 @@ def create_enhanced_graph_plotly(
             else:
                 nbfi_info = ""
         else:
+            balance_display = f"${balance:.1f}B"
             nbfi_info = ""
 
         # Build hover text
@@ -301,7 +306,7 @@ def create_enhanced_graph_plotly(
         hover_text = (
             f"<b>{name}</b><br>"
             f"Type: {node_type}<br>"
-            f"Balance: ${balance:.1f}B<br>"
+            f"Balance: {balance_display}<br>"
             f"Δ1D: ${delta_1d:.1f}B<br>"
             f"Δ5D: ${delta_5d:.1f}B<br>"
             f"Z-score: {z_score:.2f}<br>"
@@ -318,10 +323,11 @@ def create_enhanced_graph_plotly(
         if abs(balance) > 0:
             import math
             # Log scale for large values to prevent giant nodes
-            size = 10 + 5 * math.log10(abs(balance) + 1)
-            node_sizes.append(min(size, 35))  # Cap at 35 pixels
+            # More aggressive scaling to prevent overlap
+            size = 8 + 3 * math.log10(abs(balance) + 1)
+            node_sizes.append(min(size, 25))  # Cap at 25 pixels (reduced from 35)
         else:
-            node_sizes.append(15)  # Default size for zero balance
+            node_sizes.append(12)  # Default size for zero balance
 
         # Border: Red and thick if vulnerable
         if name in vulnerable_set:

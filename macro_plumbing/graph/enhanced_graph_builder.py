@@ -173,11 +173,55 @@ class EnhancedLiquidityGraph:
 
         nbfi_nodes = build_nbfi_nodes(self.df)
 
+        # Scale factor to make NBFI nodes comparable to core nodes for visualization
+        # Core nodes are in ~500-3000B range, NBFI are 4000-35000B
+        # Scale down by ~10x to keep proportions but prevent giant nodes
+        NBFI_SCALE_FACTOR = 0.1
+
+        # Compute stress time series for deltas
+        from .nbfi_nodes import (
+            estimate_hedge_fund_stress,
+            estimate_asset_manager_stress,
+            estimate_insurance_pension_stress
+        )
+
+        hf_stress_series, _ = estimate_hedge_fund_stress(self.df)
+        am_stress_series, _ = estimate_asset_manager_stress(self.df)
+        ins_stress_series, _ = estimate_insurance_pension_stress(self.df)
+
+        stress_map = {
+            'Hedge_Funds': hf_stress_series,
+            'Asset_Managers': am_stress_series,
+            'Insurance_Pensions': ins_stress_series
+        }
+
         for name, nbfi_node in nbfi_nodes.items():
+            # Get stress series for this node
+            stress_series = stress_map.get(name, pd.Series([0]))
+
+            # Calculate deltas and z-scores from stress series
+            delta_1d = stress_series.diff().iloc[-1] if len(stress_series) > 1 else 0
+            delta_5d = stress_series.diff(5).iloc[-1] if len(stress_series) > 5 else 0
+
+            # Z-score of current stress
+            if len(stress_series) > 30:
+                stress_mean = stress_series.rolling(126).mean().iloc[-1]
+                stress_std = stress_series.rolling(126).std().iloc[-1]
+                z_score = (stress_series.iloc[-1] - stress_mean) / stress_std if stress_std > 0 else 0
+            else:
+                z_score = 0
+
+            # Percentile
+            percentile = stress_series.rank(pct=True).iloc[-1] if len(stress_series) > 0 else 0.5
+
             self.G.add_node(
                 nbfi_node.name,
                 type=nbfi_node.type,
-                balance=nbfi_node.aum_estimate,
+                balance=nbfi_node.aum_estimate * NBFI_SCALE_FACTOR,  # Scaled for better visualization
+                delta_1d=delta_1d,
+                delta_5d=delta_5d,
+                z_score=z_score,
+                percentile=percentile,
                 stress_prob=max(0, min(1, (nbfi_node.stress_score + 2) / 4))  # Convert z-score to prob
             )
 
@@ -357,10 +401,12 @@ class EnhancedLiquidityGraph:
         am_stress = self.G.nodes.get('Asset_Managers', {}).get('stress_prob', 0)
         ins_stress = self.G.nodes.get('Insurance_Pensions', {}).get('stress_prob', 0)
 
-        # Weighted average by AUM
-        hf_aum = self.G.nodes.get('Hedge_Funds', {}).get('balance', 0)
-        am_aum = self.G.nodes.get('Asset_Managers', {}).get('balance', 0)
-        ins_aum = self.G.nodes.get('Insurance_Pensions', {}).get('balance', 0)
+        # Weighted average by REAL AUM (not scaled)
+        # Need to reverse the scale factor applied for visualization
+        NBFI_SCALE_FACTOR = 0.1
+        hf_aum = self.G.nodes.get('Hedge_Funds', {}).get('balance', 0) / NBFI_SCALE_FACTOR
+        am_aum = self.G.nodes.get('Asset_Managers', {}).get('balance', 0) / NBFI_SCALE_FACTOR
+        ins_aum = self.G.nodes.get('Insurance_Pensions', {}).get('balance', 0) / NBFI_SCALE_FACTOR
 
         total_aum = hf_aum + am_aum + ins_aum
 
