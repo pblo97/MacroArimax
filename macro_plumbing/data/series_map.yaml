@@ -36,11 +36,13 @@ core_plumbing:
     winsorize: true
     category: fed_balance_sheet
   RESERVES:
-    code: TOTRESNS
-    description: Total Reserves of Depository Institutions
+    code: WRESBAL
+    description: Reserve Balances with Federal Reserve Banks (Weekly H.4.1)
     transform: level
     winsorize: true
     category: fed_balance_sheet
+    frequency: weekly
+    note: "Changed from TOTRESNS (monthly) to WRESBAL (weekly Wed data) for proper flow analysis"
   BANK_RESERVES_WEEKLY:
     code: WRESBAL
     description: Reserve Balances with Federal Reserve Banks (Weekly H.4.1)
@@ -568,7 +570,8 @@ processing:
 # Mixing frequencies in statistical analysis creates bias.
 #
 # WEEKLY SERIES (update Wednesdays only):
-#   - RESERVES (TOTRESNS) - H.3 report, updated Thursdays (reflecting Wed data)
+#   - RESERVES (WRESBAL) - H.4.1 report, updated Thursdays (reflecting Wed data)
+#     NOTE: Changed from TOTRESNS (monthly) to WRESBAL (weekly) for proper flow analysis
 #   - TGA (WTREGEN) - H.4.1 report, updated Thursdays (reflecting Wed data)
 #
 # DAILY SERIES (update every business day):
