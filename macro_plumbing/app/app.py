@@ -704,6 +704,58 @@ if st.session_state.get('run_analysis', False):
                     st.error(f"Error displaying tables: {e}")
                     st.exception(e)
 
+            # Flow diagnostics expander
+            with st.expander("🔍 Diagnóstico de Flows (¿Por qué algunos están en 0?)"):
+                st.markdown("""
+                **IMPORTANTE:** RESERVES y TGA son series **semanales** (actualizan miércoles),
+                mientras que RRP es **diaria**. Por eso algunos flows pueden ser 0 en días que no son miércoles.
+                """)
+
+                try:
+                    # Show last 10 values of key series
+                    diagnostic_cols = {
+                        'RESERVES (Weekly)': 'RESERVES',
+                        'delta_reserves': 'delta_reserves',
+                        'TGA (Weekly)': 'TGA',
+                        'delta_tga': 'delta_tga',
+                        'RRP (Daily)': 'RRP',
+                        'delta_rrp': 'delta_rrp'
+                    }
+
+                    st.subheader(f"Últimos 10 valores - Fecha actual: {df.index[-1].strftime('%Y-%m-%d (%A)')}")
+
+                    for label, col in diagnostic_cols.items():
+                        if col in df.columns:
+                            series = df[col].dropna()
+                            if len(series) > 0:
+                                st.markdown(f"**{label}** (último: {series.iloc[-1]:.2f})")
+                                tail_df = series.tail(10).to_frame()
+                                tail_df.index = tail_df.index.strftime('%Y-%m-%d (%a)')  # Add day of week
+                                st.dataframe(tail_df, use_container_width=True)
+                            else:
+                                st.warning(f"{label}: Sin datos")
+                        else:
+                            st.warning(f"{label}: Columna no encontrada")
+
+                    # Check if today is a data update day
+                    last_date = df.index[-1]
+                    day_of_week = last_date.strftime('%A')
+
+                    if day_of_week != 'Wednesday':
+                        st.info(f"""
+                        📅 **Hoy es {day_of_week}**, no Wednesday. Las series semanales (RESERVES, TGA)
+                        mantienen el mismo valor desde el último miércoles, por eso delta=0.
+
+                        Para ver flows no-cero en RESERVES/TGA, ejecuta la app un **miércoles** o usa datos históricos de un miércoles.
+                        """)
+                    else:
+                        st.success("✅ Hoy es Wednesday - las series semanales deberían actualizarse")
+
+                except Exception as e:
+                    st.error(f"Error en diagnóstico: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+
         # Subtab 2: Markov Dynamics
         with subtab2:
             st.subheader("Estados Markov por Nodo")

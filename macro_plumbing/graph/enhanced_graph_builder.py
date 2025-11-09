@@ -238,34 +238,55 @@ class EnhancedLiquidityGraph:
 
     def _add_core_edges(self):
         """Add core liquidity flow edges."""
-        # Helper to safely get latest value from a column
-        def safe_get_latest(col_name, fallback_col=None):
+        # Helper to safely get latest meaningful flow value
+        def safe_get_latest(col_name, fallback_col=None, lookback=7):
             """
-            Get latest value from column, with optional fallback.
+            Get latest meaningful flow value from column.
+
+            For weekly series (RESERVES, TGA), the daily delta will be 0 on non-update days.
+            This function looks back up to `lookback` days to find the last non-zero change.
 
             Uses pre-computed delta columns if available (delta_reserves, delta_tga, etc.)
             Otherwise calculates from raw series.
             """
-            # Try the column first
+            # Try the pre-computed delta column first
             if col_name in self.df.columns:
                 series = self.df[col_name].dropna()
                 if len(series) > 0:
-                    value = series.iloc[-1]
-                    # Debug: show if value is very small/zero
-                    if abs(value) < 0.01:
-                        print(f"ℹ️  {col_name}: value={value:.4f} (near zero)")
-                    return value
+                    # For weekly series, look for last non-zero change within lookback window
+                    # This handles the case where today isn't an update day
+                    tail = series.tail(lookback)
+                    non_zero = tail[tail.abs() > 0.01]
+
+                    if len(non_zero) > 0:
+                        value = non_zero.iloc[-1]
+                        if abs(value) > 0.01:
+                            print(f"ℹ️  {col_name}: using last non-zero value from {lookback} days = {value:.4f}")
+                        return value
+                    else:
+                        # No non-zero values in lookback window
+                        print(f"ℹ️  {col_name}: no change in last {lookback} days, using 0")
+                        return 0
                 else:
                     print(f"⚠️  Warning: {col_name} exists but all NaN")
                     return 0
 
-            # Try fallback calculation
+            # Try fallback calculation from raw series
             if fallback_col and fallback_col in self.df.columns:
                 series = self.df[fallback_col].dropna()
                 if len(series) >= 2:
-                    delta = series.diff().iloc[-1]
-                    print(f"ℹ️  {col_name} not found, computed from {fallback_col}: {delta:.4f}")
-                    return delta
+                    # Compute delta for last available period
+                    deltas = series.diff()
+                    tail = deltas.tail(lookback)
+                    non_zero = tail[tail.abs() > 0.01]
+
+                    if len(non_zero) > 0:
+                        delta = non_zero.iloc[-1]
+                        print(f"ℹ️  {col_name} not found, computed from {fallback_col}: {delta:.4f}")
+                        return delta
+                    else:
+                        print(f"ℹ️  {fallback_col}: no change in last {lookback} days")
+                        return 0
                 else:
                     print(f"⚠️  Warning: {fallback_col} has < 2 points, cannot compute {col_name}")
                     return 0
