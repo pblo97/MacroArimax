@@ -231,12 +231,35 @@ if st.session_state.get('run_analysis', False):
             else:
                 cusum_alarm = pd.Series(0, index=df.index)
 
-            # 3. Anomalies
-            plumbing_features = df[["sofr_effr_spread", "delta_rrp", "delta_tga"]].dropna()
-            if len(plumbing_features) > 100:
-                anomaly_flag = detect_anomalies(plumbing_features, contamination=0.05)
+            # 3. Anomalies - Separated by frequency
+            # IMPORTANT: RESERVES and TGA are weekly series (update Wednesdays),
+            # while RRP is daily. Mixing frequencies in anomaly detection creates
+            # statistical bias (delta_reserves/delta_tga = 0 for 80% of days).
+            # Solution: Separate daily and weekly anomaly detection.
+
+            # Daily anomalies (daily series only: sofr_effr_spread, delta_rrp)
+            daily_features = df[["sofr_effr_spread", "delta_rrp"]].dropna()
+            if len(daily_features) > 100:
+                daily_anomaly_flag = detect_anomalies(daily_features, contamination=0.05)
             else:
-                anomaly_flag = pd.Series(0, index=df.index)
+                daily_anomaly_flag = pd.Series(0, index=df.index)
+
+            # Weekly anomalies (only Wednesdays for RESERVES/TGA updates)
+            wednesdays = df[df.index.dayofweek == 2]  # 2 = Wednesday
+            if len(wednesdays) > 20:  # At least 20 weeks of data
+                weekly_features = nl_df.loc[wednesdays.index, ["delta_reserves", "delta_tga"]].dropna()
+                if len(weekly_features) > 20:
+                    weekly_anomaly_flag = detect_anomalies(weekly_features, contamination=0.05)
+                    # Reindex to full timeline (non-Wednesdays get 0)
+                    weekly_anomaly_flag = weekly_anomaly_flag.reindex(df.index, fill_value=0)
+                else:
+                    weekly_anomaly_flag = pd.Series(0, index=df.index)
+            else:
+                weekly_anomaly_flag = pd.Series(0, index=df.index)
+
+            # Combine: flag if either daily OR weekly anomaly detected
+            anomaly_flag = ((daily_anomaly_flag == 1) | (weekly_anomaly_flag == 1)).astype(int)
+            anomaly_flag = pd.Series(anomaly_flag, index=df.index, name="anomaly")
 
             # 4. Net Liquidity stress
             # Use rolling percentile to detect when NL is in bottom 20%
