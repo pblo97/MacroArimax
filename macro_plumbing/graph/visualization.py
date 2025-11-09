@@ -489,7 +489,7 @@ def create_enhanced_graph_plotly(
     # Prepare annotations list
     annotations = []
 
-    # Add contagion risk indicator in top-left corner
+    # Add contagion risk indicator in top-left corner (higher position)
     contagion_color = "red" if metrics.contagion_index > 100 else "orange" if metrics.contagion_index > 50 else "green"
     contagion_status = "HIGH" if metrics.contagion_index > 100 else "MEDIUM" if metrics.contagion_index > 50 else "LOW"
 
@@ -497,7 +497,7 @@ def create_enhanced_graph_plotly(
         dict(
             text=f"<b>Contagion: {contagion_status}</b><br>{metrics.contagion_index:.1f}",
             xref="paper", yref="paper",
-            x=0.01, y=0.99,
+            x=0.01, y=0.95,  # Changed from 0.99 to 0.95 (below title)
             xanchor="left", yanchor="top",
             showarrow=False,
             font=dict(size=10, family="Arial", color="white"),
@@ -508,13 +508,13 @@ def create_enhanced_graph_plotly(
         )
     )
 
-    # Add resilience indicator in top-left (below contagion)
+    # Add resilience indicator in top-left (below contagion, but above graph area)
     resilience_color = "green" if metrics.network_resilience > 0.7 else "orange" if metrics.network_resilience > 0.4 else "red"
     annotations.append(
         dict(
             text=f"<b>Resilience:</b> {metrics.network_resilience:.1%}",
             xref="paper", yref="paper",
-            x=0.01, y=0.91,
+            x=0.01, y=0.87,  # Changed from 0.91 to 0.87 (more separation)
             xanchor="left", yanchor="top",
             showarrow=False,
             font=dict(size=9, family="Arial", color="white"),
