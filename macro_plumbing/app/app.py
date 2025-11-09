@@ -666,11 +666,15 @@ if st.session_state.get('run_analysis', False):
 
             # Expandable tables
             with st.expander("📊 Ver Tablas Detalladas"):
-                nodes_df, edges_df = graph.to_dataframe()
+                # Use enhanced graph if available, otherwise fallback to standard graph
+                graph_to_display = enhanced_graph if show_enhanced and enhanced_graph is not None else graph
+                nodes_df, edges_df = graph_to_display.to_dataframe()
                 col1, col2 = st.columns(2)
                 with col1:
+                    st.subheader("Nodes" + (" (Enhanced with NBFI)" if show_enhanced else ""))
                     st.dataframe(nodes_df, use_container_width=True)
                 with col2:
+                    st.subheader("Edges" + (" (with Contagion)" if show_enhanced else ""))
                     st.dataframe(edges_df, use_container_width=True)
 
         # Subtab 2: Markov Dynamics
