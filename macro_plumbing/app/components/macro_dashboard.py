@@ -84,6 +84,68 @@ def create_priority1_panel(df):
         st.warning("No data available for crisis indicators")
         return
 
+    # ========== DEBUG PANEL ==========
+    with st.expander("🔍 DEBUG: Data Availability", expanded=True):
+        st.write("**DataFrame shape:**", df.shape)
+        st.write("**Last date:**", df.index[-1])
+
+        # Show ALL columns available
+        st.write("**All columns in DataFrame:**")
+        all_cols = sorted(df.columns.tolist())
+        st.write(f"Total columns: {len(all_cols)}")
+        st.code(", ".join(all_cols))
+
+        # Check base series
+        st.write("**Base Series Available:**")
+        base_series = ['EUR3MTD156N', 'TB3MS', 'CP_FINANCIAL_3M', 'MOVE', 'VIX', 'HY_OAS']
+        for series in base_series:
+            if series in df.columns:
+                last_val = df[series].iloc[-1]
+                non_null_count = df[series].notna().sum()
+                st.write(f"✅ {series}: {last_val:.2f} (non-null: {non_null_count}/{len(df)})")
+            else:
+                st.write(f"❌ {series}: NOT IN DATAFRAME")
+
+        # Check derived features
+        st.write("**Derived Features:**")
+        derived = ['fx_basis_proxy', 'cp_tbill_spread', 'crisis_composite']
+        for feature in derived:
+            if feature in df.columns:
+                last_val = df[feature].iloc[-1]
+                non_null_count = df[feature].notna().sum()
+                st.write(f"✅ {feature}: {last_val:.2f} (non-null: {non_null_count}/{len(df)})")
+            else:
+                st.write(f"❌ {feature}: NOT IN DATAFRAME")
+
+        # Show last 5 rows of key columns
+        st.write("**Last 5 values of key series:**")
+        cols_to_show = [c for c in ['EUR3MTD156N', 'TB3MS', 'fx_basis_proxy', 'CP_FINANCIAL_3M', 'cp_tbill_spread', 'MOVE', 'VIX'] if c in df.columns]
+        if cols_to_show:
+            st.dataframe(df[cols_to_show].tail(5))
+
+        # Check what's needed for derived features
+        st.write("**Derived Feature Dependencies:**")
+        st.write("- fx_basis_proxy = EUR3MTD156N - TB3MS")
+        if 'EUR3MTD156N' in df.columns and 'TB3MS' in df.columns:
+            st.write("  ✅ Both components available")
+            eur_val = df['EUR3MTD156N'].iloc[-1]
+            tb3_val = df['TB3MS'].iloc[-1]
+            manual_calc = eur_val - tb3_val
+            st.write(f"  Manual calculation: {eur_val:.4f} - {tb3_val:.4f} = {manual_calc:.4f}")
+        else:
+            st.write("  ❌ Missing EUR3MTD156N or TB3MS")
+
+        st.write("- cp_tbill_spread = CP_FINANCIAL_3M - TB3MS")
+        if 'CP_FINANCIAL_3M' in df.columns and 'TB3MS' in df.columns:
+            st.write("  ✅ Both components available")
+            cp_val = df['CP_FINANCIAL_3M'].iloc[-1]
+            tb3_val = df['TB3MS'].iloc[-1]
+            manual_calc = cp_val - tb3_val
+            st.write(f"  Manual calculation: {cp_val:.4f} - {tb3_val:.4f} = {manual_calc:.4f}")
+        else:
+            st.write("  ❌ Missing CP_FINANCIAL_3M or TB3MS")
+    # ========== END DEBUG ==========
+
     # Create 4 columns for the 4 indicators
     col1, col2, col3, col4 = st.columns(4)
 
