@@ -156,9 +156,9 @@ class MasterDataFetcher:
         return results
 
     def _fetch_fred_core(self) -> pd.DataFrame:
-        """Fetch core FRED series."""
+        """Fetch core FRED series (including optional series for Macro Dashboard)."""
         try:
-            df = self.fred.fetch_all()
+            df = self.fred.fetch_all(include_optional=True)
             if df is not None and len(df) > 0:
                 logger.info(f"  ✅ FRED: {len(df)} rows")
                 return df

@@ -287,7 +287,7 @@ market_indicators:
     transform: level
     winsorize: true
     category: volatility
-    optional: true
+    note: "Required for Macro Dashboard Priority 1 indicators"
   DEXUSEU:
     code: DEXUSEU
     description: U.S. / Euro Foreign Exchange Rate (daily)
@@ -301,7 +301,7 @@ market_indicators:
     transform: level
     winsorize: false
     category: rates
-    optional: true
+    note: "Required for FX Basis Proxy calculation (Du et al. 2018)"
   MMMFFAQ027S:
     code: MMMFFAQ027S
     description: Money Market Funds; Total Financial Assets, Level

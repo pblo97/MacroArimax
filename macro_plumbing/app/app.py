@@ -193,9 +193,9 @@ if st.session_state.get('run_analysis', False):
                 st.error(f"Error fetching data: {e}")
                 st.warning("Falling back to FRED-only data...")
                 try:
-                    # Fallback to FRED-only
+                    # Fallback to FRED-only (include optional series for Macro Dashboard)
                     client = FREDClient(api_key=fred_api_key)
-                    df_raw = client.fetch_all(start_date=start_date)
+                    df_raw = client.fetch_all(start_date=start_date, include_optional=True)
                     df = client.compute_derived_features(df_raw)
                     st.info(f"✅ FRED data loaded: {len(df)} observations (Phase 2 unavailable)")
                 except Exception as e2:
