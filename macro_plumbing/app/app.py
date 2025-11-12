@@ -46,6 +46,7 @@ from macro_plumbing.metrics.lead_lag_and_dm import (
 from macro_plumbing.risk.position_overlay import (
     generate_playbook, create_pre_close_checklist, compute_rolling_beta_path
 )
+from macro_plumbing.app.components.macro_dashboard import render_macro_dashboard
 
 
 # Page config
@@ -99,13 +100,14 @@ if st.session_state.get('run_analysis', False):
         st.stop()
 
     # Create tabs
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "🚦 Semáforo",
         "📊 Detalle Señales",
         "🔗 Mapa Drenajes",
         "📈 Backtest",
         "🔍 Explicabilidad",
         "🤖 Crisis Predictor",
+        "🌍 Macro Dashboard",
     ])
 
     # ==================
@@ -2306,6 +2308,31 @@ if st.session_state.get('run_analysis', False):
             st.error(f"Unexpected error: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
+
+    # ==================
+    # Tab 7: Macro Dashboard (Priority 1 Crisis Indicators)
+    # ==================
+    with tab7:
+        try:
+            render_macro_dashboard(df)
+        except Exception as e:
+            st.error(f"Error rendering Macro Dashboard: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+            st.markdown("""
+            **Possible causes:**
+            - Missing required macro series (check series_map.yaml)
+            - Data fetch errors from FRED
+            - Calculation errors in derived features
+
+            Check that the following series are available:
+            - FX: EUR3MTD156N, TB3MS
+            - Volatility: VIX, MOVE
+            - Credit: HY_OAS, CORP_AAA_OAS, CORP_BBB_OAS
+            - Rates: T10Y2Y, DGS5, DGS10, BREAKEVEN_5Y, BREAKEVEN_10Y
+            - Inflation: CPI, CORE_CPI, PCE, CORE_PCE
+            - Fed: WALCL
+            """)
 
 else:
     st.info("👈 Configure los parámetros en el sidebar y presione **Run Analysis** para comenzar")
