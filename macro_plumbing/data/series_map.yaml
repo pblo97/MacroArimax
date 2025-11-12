@@ -399,6 +399,57 @@ market_indicators:
     transform: level
     winsorize: true
     category: credit
+  # Macro Dashboard - Inflation Indicators
+  CPI:
+    code: CPIAUCSL
+    description: Consumer Price Index for All Urban Consumers - All Items
+    transform: level
+    winsorize: false
+    category: inflation
+  CORE_CPI:
+    code: CPILFESL
+    description: Consumer Price Index - All Items Less Food & Energy
+    transform: level
+    winsorize: false
+    category: inflation
+  PCE:
+    code: PCEPI
+    description: Personal Consumption Expenditures - Price Index
+    transform: level
+    winsorize: false
+    category: inflation
+  CORE_PCE:
+    code: PCEPILFE
+    description: Personal Consumption Expenditures Excluding Food and Energy - Price Index
+    transform: level
+    winsorize: false
+    category: inflation
+  # Macro Dashboard - Activity Indicators
+  ISM_MFG:
+    code: MANEMP
+    description: ISM Manufacturing - PMI Composite Index
+    transform: level
+    winsorize: false
+    category: activity
+    optional: true
+  GDP:
+    code: GDP
+    description: Gross Domestic Product
+    transform: level
+    winsorize: false
+    category: activity
+  RETAIL_SALES:
+    code: RSXFS
+    description: Advance Retail Sales - Retail and Food Services
+    transform: level
+    winsorize: false
+    category: activity
+  PAYROLLS:
+    code: PAYEMS
+    description: All Employees - Total Nonfarm Payrolls
+    transform: level
+    winsorize: false
+    category: labor
 derived_features:
   sofr_effr_spread:
     formula: SOFR - EFFR
@@ -536,6 +587,37 @@ derived_features:
   capacity_gap:
     formula: 85 - CAPACITY_UTILIZATION
     description: Economic slack (85% baseline)
+  # Macro Dashboard - Priority 1 Crisis Indicators
+  fx_basis_proxy:
+    formula: EUR3MTD156N - TB3MS
+    description: FX Cross-Currency Basis Proxy (EURIBOR-TB3M, Du et al. 2018)
+    note: "Proxy for USD shortage. True basis requires FX forwards. Negative = USD tight"
+  cp_stress_index:
+    formula: (cp_tbill_spread + cp_nonfinancial_spread) / 2
+    description: Commercial Paper Stress Index (avg of financial + nonfinancial spreads)
+  crisis_composite:
+    formula: (VIX > 30) + (HY_OAS > 600) + (cp_tbill_spread > 100) + (MOVE > 100)
+    description: Crisis Composite Score (0-4, Adrian et al. 2019)
+    note: "4 = extreme stress, 0 = normal. Combines volatility, credit, funding, rates"
+  # Macro Dashboard - Inflation & Growth
+  cpi_yoy:
+    formula: pct_change(CPI, periods=252)
+    description: CPI Year-over-Year % Change
+  core_cpi_yoy:
+    formula: pct_change(CORE_CPI, periods=252)
+    description: Core CPI Year-over-Year % Change
+  pce_yoy:
+    formula: pct_change(PCE, periods=252)
+    description: PCE Year-over-Year % Change
+  core_pce_yoy:
+    formula: pct_change(CORE_PCE, periods=252)
+    description: Core PCE Year-over-Year % Change (Fed's preferred measure)
+  gdp_yoy:
+    formula: pct_change(GDP, periods=4)
+    description: GDP Year-over-Year % Change (quarterly data)
+  payrolls_3m_change:
+    formula: diff(PAYEMS, periods=3)
+    description: 3-Month Change in Nonfarm Payrolls (000s)
 calendar_events:
   month_end:
     description: Last business day of month
