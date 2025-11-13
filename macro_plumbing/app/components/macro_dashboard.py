@@ -85,7 +85,7 @@ def create_priority1_panel(df):
         return
 
     # ========== DEBUG PANEL ==========
-    with st.expander("🔍 DEBUG: Data Availability", expanded=True):
+    with st.expander("🔍 DEBUG: Data Availability", expanded=False):
         st.write("**DataFrame shape:**", df.shape)
         st.write("**Last date:**", df.index[-1])
 
@@ -97,14 +97,21 @@ def create_priority1_panel(df):
 
         # Check base series
         st.write("**Base Series Available:**")
-        base_series = ['EUR3MTD156N', 'TB3MS', 'CP_FINANCIAL_3M', 'MOVE', 'VIX', 'HY_OAS']
-        for series in base_series:
+        base_series = {
+            'EUR3MTD156N': 'optional - needed for fx_basis_proxy',
+            'TB3MS': 'required',
+            'CP_FINANCIAL_3M': 'required',
+            'MOVE': 'optional - bond volatility',
+            'VIX': 'required',
+            'HY_OAS': 'required'
+        }
+        for series, note in base_series.items():
             if series in df.columns:
                 last_val = df[series].iloc[-1]
                 non_null_count = df[series].notna().sum()
-                st.write(f"✅ {series}: {last_val:.2f} (non-null: {non_null_count}/{len(df)})")
+                st.write(f"✅ {series}: {last_val:.2f} (non-null: {non_null_count}/{len(df)}) - {note}")
             else:
-                st.write(f"❌ {series}: NOT IN DATAFRAME")
+                st.write(f"❌ {series}: NOT IN DATAFRAME - {note}")
 
         # Check derived features
         st.write("**Derived Features:**")
