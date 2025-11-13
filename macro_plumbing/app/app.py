@@ -195,7 +195,7 @@ if st.session_state.get('run_analysis', False):
                 try:
                     # Fallback to FRED-only
                     client = FREDClient(api_key=fred_api_key)
-                    df_raw = client.fetch_all(start_date=start_date)
+                    df_raw = client.fetch_all(start_date=start_date, include_optional=True)
                     df = client.compute_derived_features(df_raw)
                     st.info(f"✅ FRED data loaded: {len(df)} observations (Phase 2 unavailable)")
                 except Exception as e2:
