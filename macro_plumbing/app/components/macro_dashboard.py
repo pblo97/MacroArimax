@@ -160,75 +160,107 @@ def create_priority1_panel(df):
     with col1:
         # FX Cross-Currency Basis Proxy
         fx_basis = latest.get('fx_basis_proxy', np.nan)
-        delta_fx = df['fx_basis_proxy'].diff().iloc[-1] if 'fx_basis_proxy' in df.columns else 0
 
-        st.metric(
-            label="FX Basis Proxy (bp)",
-            value=f"{fx_basis:.1f}" if not np.isnan(fx_basis) else "N/A",
-            delta=f"{delta_fx:.1f} bp",
-            delta_color="inverse",  # Negative is bad (USD shortage)
-            help="EURIBOR-TB3M spread. Negative = USD shortage (Du et al. 2018). Critical below -50bp"
-        )
+        if not np.isnan(fx_basis):
+            delta_fx = df['fx_basis_proxy'].diff().iloc[-1] if 'fx_basis_proxy' in df.columns else 0
+            st.metric(
+                label="FX Basis Proxy (bp)",
+                value=f"{fx_basis:.1f}",
+                delta=f"{delta_fx:.1f} bp",
+                delta_color="inverse",  # Negative is bad (USD shortage)
+                help="EURIBOR-TB3M spread. Negative = USD shortage (Du et al. 2018). Critical below -50bp"
+            )
 
-        # Alert if critical
-        if fx_basis < -50:
-            st.error("⚠️ CRITICAL: USD shortage detected!")
-        elif fx_basis < -20:
-            st.warning("⚠️ Elevated USD funding stress")
+            # Alert if critical
+            if fx_basis < -50:
+                st.error("⚠️ CRITICAL: USD shortage detected!")
+            elif fx_basis < -20:
+                st.warning("⚠️ Elevated USD funding stress")
+        else:
+            st.metric(
+                label="FX Basis Proxy (bp)",
+                value="N/A",
+                help="Requires EUR3MTD156N data (not available)"
+            )
+            st.caption("⚠️ EUR3MTD156N required")
 
     with col2:
         # Commercial Paper Spread
         cp_spread = latest.get('cp_tbill_spread', np.nan)
-        delta_cp = df['cp_tbill_spread'].diff().iloc[-1] if 'cp_tbill_spread' in df.columns else 0
 
-        st.metric(
-            label="CP-TBill Spread (bp)",
-            value=f"{cp_spread:.1f}" if not np.isnan(cp_spread) else "N/A",
-            delta=f"{delta_cp:.1f} bp",
-            delta_color="inverse",
-            help="Financial CP - Treasury Bill 3M. Crisis signal >100bp (Kacperczyk-Schnabl 2010)"
-        )
+        if not np.isnan(cp_spread):
+            delta_cp = df['cp_tbill_spread'].diff().iloc[-1] if 'cp_tbill_spread' in df.columns else 0
+            st.metric(
+                label="CP-TBill Spread (bp)",
+                value=f"{cp_spread:.1f}",
+                delta=f"{delta_cp:.1f} bp",
+                delta_color="inverse",
+                help="Financial CP - Treasury Bill 3M. Crisis signal >100bp (Kacperczyk-Schnabl 2010)"
+            )
 
-        if cp_spread > 100:
-            st.error("⚠️ CRITICAL: Funding crisis!")
-        elif cp_spread > 50:
-            st.warning("⚠️ Elevated funding stress")
+            if cp_spread > 100:
+                st.error("⚠️ CRITICAL: Funding crisis!")
+            elif cp_spread > 50:
+                st.warning("⚠️ Elevated funding stress")
+        else:
+            st.metric(
+                label="CP-TBill Spread (bp)",
+                value="N/A",
+                help="Requires CP_FINANCIAL_3M and TB3MS"
+            )
+            st.caption("⚠️ Data missing")
 
     with col3:
         # MOVE Index (Bond Volatility)
         move_index = latest.get('MOVE', np.nan)
-        delta_move = df['MOVE'].diff().iloc[-1] if 'MOVE' in df.columns else 0
 
-        st.metric(
-            label="MOVE Index",
-            value=f"{move_index:.1f}" if not np.isnan(move_index) else "N/A",
-            delta=f"{delta_move:.1f}",
-            delta_color="inverse",
-            help="Bond market volatility. Crisis signal >120. Normal range: 50-80"
-        )
+        if not np.isnan(move_index):
+            delta_move = df['MOVE'].diff().iloc[-1]
+            st.metric(
+                label="MOVE Index",
+                value=f"{move_index:.1f}",
+                delta=f"{delta_move:.1f}",
+                delta_color="inverse",
+                help="Bond market volatility. Crisis signal >120. Normal range: 50-80"
+            )
 
-        if move_index > 150:
-            st.error("⚠️ CRITICAL: Bond market panic!")
-        elif move_index > 100:
-            st.warning("⚠️ Elevated bond volatility")
+            if move_index > 150:
+                st.error("⚠️ CRITICAL: Bond market panic!")
+            elif move_index > 100:
+                st.warning("⚠️ Elevated bond volatility")
+        else:
+            st.metric(
+                label="MOVE Index",
+                value="N/A",
+                help="MOVE index not available (optional series)"
+            )
+            st.caption("⚠️ Optional series")
 
     with col4:
         # Primary Dealer Leverage (GAP #2 - using VIX as proxy)
         vix = latest.get('VIX', np.nan)
-        delta_vix = df['VIX'].diff().iloc[-1] if 'VIX' in df.columns else 0
 
-        st.metric(
-            label="VIX (PD Leverage Proxy)",
-            value=f"{vix:.1f}" if not np.isnan(vix) else "N/A",
-            delta=f"{delta_vix:.1f}",
-            delta_color="inverse",
-            help="VIX as proxy for dealer stress (GAP #2: True PD leverage not available in FRED). Crisis signal >40"
-        )
+        if not np.isnan(vix):
+            delta_vix = df['VIX'].diff().iloc[-1]
+            st.metric(
+                label="VIX (PD Leverage Proxy)",
+                value=f"{vix:.1f}",
+                delta=f"{delta_vix:.1f}",
+                delta_color="inverse",
+                help="VIX as proxy for dealer stress (GAP #2: True PD leverage not available in FRED). Crisis signal >40"
+            )
 
-        if vix > 40:
-            st.error("⚠️ CRITICAL: Extreme volatility!")
-        elif vix > 30:
-            st.warning("⚠️ Elevated volatility")
+            if vix > 40:
+                st.error("⚠️ CRITICAL: Extreme volatility!")
+            elif vix > 30:
+                st.warning("⚠️ Elevated volatility")
+        else:
+            st.metric(
+                label="VIX (PD Leverage Proxy)",
+                value="N/A",
+                help="VIX data not available"
+            )
+            st.caption("⚠️ Data missing")
 
     st.markdown("---")
 
@@ -238,24 +270,29 @@ def create_priority1_panel(df):
     if 'crisis_composite' in df.columns:
         crisis_score = latest.get('crisis_composite', 0)
 
+        # Show current breakdown
+        vix_val = latest.get('VIX', 0)
+        hy_oas_val = latest.get('HY_OAS', 0)
+        cp_spread_val = latest.get('cp_tbill_spread', 0)
+        move_val = latest.get('MOVE', np.nan)
+
         col_gauge, col_chart = st.columns([1, 2])
 
         with col_gauge:
             fig_gauge = create_crisis_composite_gauge(crisis_score)
             st.plotly_chart(fig_gauge, use_container_width=True)
 
-            st.caption("""
-            **Score Components:**
-            - VIX > 30: +1 point
-            - HY OAS > 600bp: +1 point
-            - CP Spread > 100bp: +1 point
-            - MOVE > 100: +1 point
+            # Show current score breakdown
+            st.markdown(f"**Current Score: {crisis_score:.0f} / 4**")
+            st.caption(f"""
+            **Active Indicators:**
+            - VIX = {vix_val:.1f} {'✅ (< 30)' if vix_val < 30 else '⚠️ (> 30) +1'}
+            - HY OAS = {hy_oas_val:.0f}bp {'✅ (< 600)' if hy_oas_val < 600 else '⚠️ (> 600) +1'}
+            - CP Spread = {cp_spread_val:.1f}bp {'✅ (< 100)' if cp_spread_val < 100 else '⚠️ (> 100) +1'}
+            - MOVE = {'N/A (not counted)' if np.isnan(move_val) else f'{move_val:.0f} {"✅ (< 100)" if move_val < 100 else "⚠️ (> 100) +1"}'}
 
-            **Interpretation:**
-            - 0-1: Normal conditions
-            - 1-2: Moderate stress
-            - 2-3: Elevated stress
-            - 3-4: Crisis conditions
+            **Thresholds:**
+            0-1 = Normal | 1-2 = Moderate | 2-3 = Elevated | 3-4 = Crisis
             """)
 
         with col_chart:
