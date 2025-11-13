@@ -360,6 +360,27 @@ class FREDClient:
         if "CAPACITY_UTILIZATION" in df.columns:
             df["capacity_gap"] = 85 - df["CAPACITY_UTILIZATION"]  # Slack (85% baseline)
 
+        # === MACRO DASHBOARD: PRIORITY 1 CRISIS INDICATORS ===
+        # FX Cross-Currency Basis Proxy (Du et al. 2018)
+        # Note: EUR3MTD156N is optional - may not always be available
+        if "EUR3MTD156N" in df.columns and "TB3MS" in df.columns:
+            df["fx_basis_proxy"] = df["EUR3MTD156N"] - df["TB3MS"]
+
+        # Crisis Composite Score (Adrian et al. 2019)
+        # Score 0-4: combines volatility (VIX), credit (HY OAS), funding (CP spread), rates (MOVE)
+        if all(col in df.columns for col in ["VIX", "HY_OAS"]):
+            crisis_score = (df["VIX"] > 30).astype(int) + (df["HY_OAS"] > 600).astype(int)
+
+            # Add CP spread component if available
+            if "cp_tbill_spread" in df.columns:
+                crisis_score += (df["cp_tbill_spread"] > 100).astype(int)
+
+            # Add MOVE component if available (optional series)
+            if "MOVE" in df.columns:
+                crisis_score += (df["MOVE"] > 100).astype(int)
+
+            df["crisis_composite"] = crisis_score
+
         # === CALENDAR FLAGS ===
         df["month_end"] = df.index.is_month_end
         df["quarter_end"] = df.index.is_quarter_end
