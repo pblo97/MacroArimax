@@ -99,10 +99,10 @@ def create_priority1_panel(df):
         # Check base series
         st.write("**Base Series Available:**")
         base_series = {
-            'EUR3MTD156N': 'optional - needed for fx_basis_proxy',
+            'EURIBOR_3M': 'required - for fx_basis_proxy (replaces EUR3MTD156N)',
             'TB3MS': 'required',
             'CP_FINANCIAL_3M': 'required',
-            'MOVE': 'optional - bond volatility',
+            'MOVE': 'unavailable - not in FRED (proprietary ICE BofAML)',
             'VIX': 'required',
             'HY_OAS': 'required'
         }
@@ -127,21 +127,21 @@ def create_priority1_panel(df):
 
         # Show last 5 rows of key columns
         st.write("**Last 5 values of key series:**")
-        cols_to_show = [c for c in ['EUR3MTD156N', 'TB3MS', 'fx_basis_proxy', 'CP_FINANCIAL_3M', 'cp_tbill_spread', 'MOVE', 'VIX'] if c in df.columns]
+        cols_to_show = [c for c in ['EURIBOR_3M', 'TB3MS', 'fx_basis_proxy', 'CP_FINANCIAL_3M', 'cp_tbill_spread', 'VIX'] if c in df.columns]
         if cols_to_show:
             st.dataframe(df[cols_to_show].tail(5))
 
         # Check what's needed for derived features
         st.write("**Derived Feature Dependencies:**")
-        st.write("- fx_basis_proxy = EUR3MTD156N - TB3MS")
-        if 'EUR3MTD156N' in df.columns and 'TB3MS' in df.columns:
+        st.write("- fx_basis_proxy = EURIBOR_3M - TB3MS")
+        if 'EURIBOR_3M' in df.columns and 'TB3MS' in df.columns:
             st.write("  ✅ Both components available")
-            eur_val = df['EUR3MTD156N'].iloc[-1]
+            eur_val = df['EURIBOR_3M'].iloc[-1]
             tb3_val = df['TB3MS'].iloc[-1]
             manual_calc = eur_val - tb3_val
             st.write(f"  Manual calculation: {eur_val:.4f} - {tb3_val:.4f} = {manual_calc:.4f}")
         else:
-            st.write("  ❌ Missing EUR3MTD156N or TB3MS")
+            st.write("  ❌ Missing EURIBOR_3M or TB3MS")
 
         st.write("- cp_tbill_spread = CP_FINANCIAL_3M - TB3MS")
         if 'CP_FINANCIAL_3M' in df.columns and 'TB3MS' in df.columns:
@@ -180,9 +180,9 @@ def create_priority1_panel(df):
             st.metric(
                 label="FX Basis Proxy (bp)",
                 value="N/A",
-                help="Requires EUR3MTD156N data (not available)"
+                help="Requires EURIBOR_3M data (check data source)"
             )
-            st.caption("⚠️ EUR3MTD156N required")
+            st.caption("⚠️ EURIBOR_3M required")
 
     with col2:
         # Commercial Paper Spread
@@ -356,7 +356,7 @@ def create_priority1_panel(df):
         fig = make_subplots(
             rows=2, cols=2,
             subplot_titles=("FX Basis Proxy (EURIBOR-TB3M)", "Commercial Paper Spread",
-                           "MOVE Index (Bond Volatility)", "VIX (Equity Volatility)"),
+                           "MOVE Index (Not Available)", "VIX (Equity Volatility)"),
             vertical_spacing=0.12,
             horizontal_spacing=0.1
         )
@@ -373,7 +373,7 @@ def create_priority1_panel(df):
         else:
             # Add placeholder text
             fig.add_annotation(
-                text="Data not available<br>(EUR3MTD156N required)",
+                text="Data not available<br>(EURIBOR_3M required)",
                 xref="x", yref="y",
                 x=0.5, y=0.5,
                 xanchor='center', yanchor='middle',
@@ -404,7 +404,7 @@ def create_priority1_panel(df):
         else:
             # Add placeholder text
             fig.add_annotation(
-                text="Data not available<br>(MOVE index required)",
+                text="Data not available<br>(MOVE not in FRED - proprietary)",
                 xref="x2", yref="y2",
                 x=0.5, y=0.5,
                 xanchor='center', yanchor='middle',
@@ -434,12 +434,13 @@ def create_priority1_panel(df):
         # Show note about missing indicators
         missing = []
         if 'fx_basis_proxy' not in df.columns:
-            missing.append("FX Basis Proxy (EUR3MTD156N required)")
-        if 'MOVE' not in df.columns:
-            missing.append("MOVE Index")
+            missing.append("FX Basis Proxy (EURIBOR_3M required)")
 
         if missing:
-            st.caption(f"⚠️ Missing optional indicators: {', '.join(missing)}")
+            st.caption(f"⚠️ Missing indicators: {', '.join(missing)}")
+
+        # Note about MOVE
+        st.caption("ℹ️ MOVE Index: Not available in FRED (ICE BofAML proprietary data)")
     else:
         st.warning("⚠️ Insufficient data to display historical trends. Need at least 2 of: FX Basis, CP Spread, MOVE, VIX")
 

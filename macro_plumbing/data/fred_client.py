@@ -362,8 +362,11 @@ class FREDClient:
 
         # === MACRO DASHBOARD: PRIORITY 1 CRISIS INDICATORS ===
         # FX Cross-Currency Basis Proxy (Du et al. 2018)
-        # Note: EUR3MTD156N is optional - may not always be available
-        if "EUR3MTD156N" in df.columns and "TB3MS" in df.columns:
+        # Note: Use EURIBOR_3M as EUR3MTD156N was removed from FRED in 2022
+        if "EURIBOR_3M" in df.columns and "TB3MS" in df.columns:
+            df["fx_basis_proxy"] = df["EURIBOR_3M"] - df["TB3MS"]
+        elif "EUR3MTD156N" in df.columns and "TB3MS" in df.columns:
+            # Fallback for legacy data
             df["fx_basis_proxy"] = df["EUR3MTD156N"] - df["TB3MS"]
 
         # Crisis Composite Score (Adrian et al. 2019)
