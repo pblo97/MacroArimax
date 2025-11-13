@@ -35,10 +35,11 @@ def create_crisis_composite_gauge(crisis_score):
         status = "NORMAL"
 
     fig = go.Figure(go.Indicator(
-        mode="gauge+number+delta",
+        mode="gauge+number",
         value=crisis_score,
         domain={'x': [0, 1], 'y': [0, 1]},
         title={'text': f"<b>Crisis Composite</b><br><sub>{status}</sub>"},
+        number={'font': {'size': 40}},
         gauge={
             'axis': {'range': [None, 4], 'tickwidth': 1, 'tickcolor': "darkblue"},
             'bar': {'color': color},
@@ -293,69 +294,117 @@ def create_priority1_panel(df):
             )
 
             st.plotly_chart(fig_ts, use_container_width=True)
+    else:
+        st.warning("⚠️ Crisis composite indicator not available. Check that VIX and HY_OAS are present in data.")
 
     # Time series of Priority 1 indicators
     st.subheader("Historical Trends - Priority 1 Indicators")
 
-    # Create 2x2 grid of charts
-    fig = make_subplots(
-        rows=2, cols=2,
-        subplot_titles=("FX Basis Proxy (EURIBOR-TB3M)", "Commercial Paper Spread",
-                       "MOVE Index (Bond Volatility)", "VIX (Equity Volatility)"),
-        vertical_spacing=0.12,
-        horizontal_spacing=0.1
-    )
-
     # Get last 252 days (~1 year)
     df_recent = df.tail(252)
 
-    # FX Basis
+    # Check which indicators are available
+    available_indicators = []
     if 'fx_basis_proxy' in df.columns:
-        fig.add_trace(
-            go.Scatter(x=df_recent.index, y=df_recent['fx_basis_proxy'],
-                      mode='lines', name='FX Basis', line=dict(color='blue', width=2)),
-            row=1, col=1
-        )
-        fig.add_hline(y=-50, line_dash="dash", line_color="red", row=1, col=1)
-        fig.update_yaxes(title_text="Basis Points", row=1, col=1)
-
-    # CP Spread
+        available_indicators.append('FX Basis')
     if 'cp_tbill_spread' in df.columns:
-        fig.add_trace(
-            go.Scatter(x=df_recent.index, y=df_recent['cp_tbill_spread'],
-                      mode='lines', name='CP Spread', line=dict(color='purple', width=2)),
-            row=1, col=2
-        )
-        fig.add_hline(y=100, line_dash="dash", line_color="red", row=1, col=2)
-        fig.update_yaxes(title_text="Basis Points", row=1, col=2)
-
-    # MOVE Index
+        available_indicators.append('CP Spread')
     if 'MOVE' in df.columns:
-        fig.add_trace(
-            go.Scatter(x=df_recent.index, y=df_recent['MOVE'],
-                      mode='lines', name='MOVE', line=dict(color='orange', width=2)),
-            row=2, col=1
-        )
-        fig.add_hline(y=100, line_dash="dash", line_color="red", row=2, col=1)
-        fig.update_yaxes(title_text="Index Level", row=2, col=1)
-
-    # VIX
+        available_indicators.append('MOVE')
     if 'VIX' in df.columns:
-        fig.add_trace(
-            go.Scatter(x=df_recent.index, y=df_recent['VIX'],
-                      mode='lines', name='VIX', line=dict(color='darkred', width=2)),
-            row=2, col=2
+        available_indicators.append('VIX')
+
+    if len(available_indicators) >= 2:
+        # Create 2x2 grid of charts
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=("FX Basis Proxy (EURIBOR-TB3M)", "Commercial Paper Spread",
+                           "MOVE Index (Bond Volatility)", "VIX (Equity Volatility)"),
+            vertical_spacing=0.12,
+            horizontal_spacing=0.1
         )
-        fig.add_hline(y=30, line_dash="dash", line_color="red", row=2, col=2)
-        fig.update_yaxes(title_text="Index Level", row=2, col=2)
 
-    fig.update_layout(
-        height=600,
-        showlegend=False,
-        hovermode='x unified'
-    )
+        # FX Basis
+        if 'fx_basis_proxy' in df.columns:
+            fig.add_trace(
+                go.Scatter(x=df_recent.index, y=df_recent['fx_basis_proxy'],
+                          mode='lines', name='FX Basis', line=dict(color='blue', width=2)),
+                row=1, col=1
+            )
+            fig.add_hline(y=-50, line_dash="dash", line_color="red", row=1, col=1)
+            fig.update_yaxes(title_text="Basis Points", row=1, col=1)
+        else:
+            # Add placeholder text
+            fig.add_annotation(
+                text="Data not available<br>(EUR3MTD156N required)",
+                xref="x", yref="y",
+                x=0.5, y=0.5,
+                xanchor='center', yanchor='middle',
+                showarrow=False,
+                font=dict(size=12, color="gray"),
+                row=1, col=1
+            )
 
-    st.plotly_chart(fig, use_container_width=True)
+        # CP Spread
+        if 'cp_tbill_spread' in df.columns:
+            fig.add_trace(
+                go.Scatter(x=df_recent.index, y=df_recent['cp_tbill_spread'],
+                          mode='lines', name='CP Spread', line=dict(color='purple', width=2)),
+                row=1, col=2
+            )
+            fig.add_hline(y=100, line_dash="dash", line_color="red", row=1, col=2)
+            fig.update_yaxes(title_text="Basis Points", row=1, col=2)
+
+        # MOVE Index
+        if 'MOVE' in df.columns:
+            fig.add_trace(
+                go.Scatter(x=df_recent.index, y=df_recent['MOVE'],
+                          mode='lines', name='MOVE', line=dict(color='orange', width=2)),
+                row=2, col=1
+            )
+            fig.add_hline(y=100, line_dash="dash", line_color="red", row=2, col=1)
+            fig.update_yaxes(title_text="Index Level", row=2, col=1)
+        else:
+            # Add placeholder text
+            fig.add_annotation(
+                text="Data not available<br>(MOVE index required)",
+                xref="x2", yref="y2",
+                x=0.5, y=0.5,
+                xanchor='center', yanchor='middle',
+                showarrow=False,
+                font=dict(size=12, color="gray"),
+                row=2, col=1
+            )
+
+        # VIX
+        if 'VIX' in df.columns:
+            fig.add_trace(
+                go.Scatter(x=df_recent.index, y=df_recent['VIX'],
+                          mode='lines', name='VIX', line=dict(color='darkred', width=2)),
+                row=2, col=2
+            )
+            fig.add_hline(y=30, line_dash="dash", line_color="red", row=2, col=2)
+            fig.update_yaxes(title_text="Index Level", row=2, col=2)
+
+        fig.update_layout(
+            height=600,
+            showlegend=False,
+            hovermode='x unified'
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Show note about missing indicators
+        missing = []
+        if 'fx_basis_proxy' not in df.columns:
+            missing.append("FX Basis Proxy (EUR3MTD156N required)")
+        if 'MOVE' not in df.columns:
+            missing.append("MOVE Index")
+
+        if missing:
+            st.caption(f"⚠️ Missing optional indicators: {', '.join(missing)}")
+    else:
+        st.warning("⚠️ Insufficient data to display historical trends. Need at least 2 of: FX Basis, CP Spread, MOVE, VIX")
 
 
 def create_macro_context_panel(df):
