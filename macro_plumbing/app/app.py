@@ -291,6 +291,9 @@ if st.session_state.get('run_analysis', False):
         stress_score = sum(signals[col] * weights[col] for col in weights.keys() if col in signals.columns)
         stress_score.name = "stress_score"
 
+        # Add stress_score to dataframe so other tabs can access it
+        df['stress_score'] = stress_score
+
         # Latest status
         latest_score = stress_score.iloc[-1]
         latest_date = df.index[-1]
