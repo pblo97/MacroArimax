@@ -689,19 +689,20 @@ def get_macro_context(df: pd.DataFrame) -> Dict:
         'crisis_score': latest.get('crisis_composite', np.nan),
         'vix': latest.get('VIX', np.nan),
         'hy_oas': latest.get('HY_OAS', np.nan),
-        'liquidity_score': latest.get('liq_fusion_score', np.nan),
+        'liquidity_score': latest.get('stress_score', np.nan),
         'liquidity_regime': 'Unknown'
     }
 
     # Determine liquidity regime
+    # Note: stress_score works inversely - higher values = more stress = less liquidity
     if not np.isnan(context['liquidity_score']):
-        if context['liquidity_score'] > 3:
+        if context['liquidity_score'] < 0.3:
             context['liquidity_regime'] = 'Ample Liquidity'
-        elif context['liquidity_score'] > 1:
+        elif context['liquidity_score'] < 0.5:
             context['liquidity_regime'] = 'Moderate Liquidity'
-        elif context['liquidity_score'] > -1:
+        elif context['liquidity_score'] < 0.7:
             context['liquidity_regime'] = 'Neutral'
-        elif context['liquidity_score'] > -3:
+        elif context['liquidity_score'] < 1.0:
             context['liquidity_regime'] = 'Tight Liquidity'
         else:
             context['liquidity_regime'] = 'Severe Stress'
@@ -1317,15 +1318,24 @@ def render_sp500_structure(df: pd.DataFrame):
         st.markdown("---")
         st.subheader("📐 Fibonacci Levels")
 
+        current_price = levels.get('current_price', 0)
+
+        st.caption(f"Based on: High {fib_levels['swing_high']:.2f} → Low {fib_levels['swing_low']:.2f}")
+
         col_fib1, col_fib2 = st.columns(2)
 
         with col_fib1:
-            st.markdown("**Retracements** (from swing high)")
-            for fib in fib_levels['retracements'][1:4]:  # Show 0.236, 0.382, 0.5
-                st.caption(f"{fib['label']}: {fib['price']:.2f}")
+            st.markdown("**Retracements (Support if pullback)**")
+            for fib in fib_levels['retracements'][1:5]:  # Show 0.236, 0.382, 0.5, 0.618
+                price = fib['price']
+                # Mark if price is near this level
+                if abs(price - current_price) / current_price < 0.01:  # Within 1%
+                    st.caption(f"→ {fib['label']}: **{price:.2f}** ← CURRENT AREA")
+                else:
+                    st.caption(f"{fib['label']}: {price:.2f}")
 
         with col_fib2:
-            st.markdown("**Extensions** (targets above)")
+            st.markdown("**Extensions (Upside targets)**")
             for fib in fib_levels['extensions'][:3]:  # Show 1.272, 1.414, 1.618
                 st.caption(f"{fib['label']}: {fib['price']:.2f}")
 
