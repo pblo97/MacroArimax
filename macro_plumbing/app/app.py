@@ -47,6 +47,7 @@ from macro_plumbing.risk.position_overlay import (
     generate_playbook, create_pre_close_checklist, compute_rolling_beta_path
 )
 from macro_plumbing.app.components.macro_dashboard import render_macro_dashboard
+from macro_plumbing.app.components.sp500_structure import render_sp500_structure
 
 
 # Page config
@@ -100,7 +101,7 @@ if st.session_state.get('run_analysis', False):
         st.stop()
 
     # Create tabs
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "🚦 Semáforo",
         "📊 Detalle Señales",
         "🔗 Mapa Drenajes",
@@ -108,6 +109,7 @@ if st.session_state.get('run_analysis', False):
         "🔍 Explicabilidad",
         "🤖 Crisis Predictor",
         "🌍 Macro Dashboard",
+        "📈 S&P 500 Structure",
     ])
 
     # ==================
@@ -2332,6 +2334,25 @@ if st.session_state.get('run_analysis', False):
             - Rates: T10Y2Y, DGS5, DGS10, BREAKEVEN_5Y, BREAKEVEN_10Y
             - Inflation: CPI, CORE_CPI, PCE, CORE_PCE
             - Fed: WALCL
+            """)
+
+    # ==================
+    # Tab 8: S&P 500 Market Structure
+    # ==================
+    with tab8:
+        try:
+            render_sp500_structure(df)
+        except Exception as e:
+            st.error(f"Error rendering S&P 500 Structure: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+            st.markdown("""
+            **Possible causes:**
+            - Missing S&P 500 data (check that SP500 series is available)
+            - Insufficient data points for swing detection
+            - Calculation errors in market structure analysis
+
+            Check that the SP500 series is properly loaded from FRED.
             """)
 
 else:
