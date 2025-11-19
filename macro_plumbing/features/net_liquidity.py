@@ -67,16 +67,55 @@ def compute_net_liquidity_components(
     """
     result = pd.DataFrame(index=df.index)
 
+    # Check if columns exist, try alternatives if not
+    def find_column(df, primary_name, alternatives=None):
+        """Find column by primary name or alternatives."""
+        if primary_name in df.columns:
+            return primary_name
+        if alternatives:
+            for alt in alternatives:
+                if alt in df.columns:
+                    return alt
+        return None
+
+    # Try to find the columns with alternatives
+    reserves_found = find_column(df, reserves_col, ["WRESBAL", "BANK_RESERVES_WEEKLY"])
+    tga_found = find_column(df, tga_col, ["WTREGEN"])
+    rrp_found = find_column(df, rrp_col, ["RRPONTSYD", "ON_RRP"])
+
+    # Check if we have all required columns
+    missing_cols = []
+    if not reserves_found:
+        missing_cols.append(f"{reserves_col} (tried: WRESBAL, BANK_RESERVES_WEEKLY)")
+    if not tga_found:
+        missing_cols.append(f"{tga_col} (tried: WTREGEN)")
+    if not rrp_found:
+        missing_cols.append(f"{rrp_col} (tried: RRPONTSYD, ON_RRP)")
+
+    if missing_cols:
+        # Return empty dataframe with expected columns but all NaN
+        print(f"WARNING: Net Liquidity calculation - missing columns: {', '.join(missing_cols)}")
+        print(f"Available columns: {list(df.columns)[:20]}...")  # Show first 20 columns
+        result["reserves"] = np.nan
+        result["tga"] = np.nan
+        result["rrp"] = np.nan
+        result["net_liquidity"] = np.nan
+        result["delta_reserves"] = np.nan
+        result["delta_tga"] = np.nan
+        result["delta_rrp"] = np.nan
+        result["delta_net_liquidity"] = np.nan
+        return result
+
     # Raw components
-    result["reserves"] = df[reserves_col]
-    result["tga"] = df[tga_col]
-    result["rrp"] = df[rrp_col]
+    result["reserves"] = df[reserves_found]
+    result["tga"] = df[tga_found]
+    result["rrp"] = df[rrp_found]
 
     # Net Liquidity
     result["net_liquidity"] = compute_net_liquidity(
-        df[reserves_col],
-        df[tga_col],
-        df[rrp_col],
+        df[reserves_found],
+        df[tga_found],
+        df[rrp_found],
     )
 
     # Changes
