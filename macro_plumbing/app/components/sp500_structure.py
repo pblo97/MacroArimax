@@ -271,10 +271,21 @@ def calculate_trend_strength(df: pd.DataFrame, price_col: str = 'SP500', window:
     # Direction score: both slopes pointing same direction
     if high_slope > 0 and low_slope > 0:
         direction_score = 100  # Strong bullish
+        is_aligned = True
     elif high_slope < 0 and low_slope < 0:
         direction_score = -100  # Strong bearish
+        is_aligned = True
     else:
-        direction_score = (high_slope + low_slope) / 2 * 100
+        # Mixed signals (HH+LL or LH+HL) = conflicting directions
+        # Calculate net bias but recognize the conflict
+        max_slope = max(abs(high_slope), abs(low_slope))
+        if max_slope > 0:
+            # Net direction as percentage of dominant slope
+            net_slope = (high_slope + low_slope) / 2
+            direction_score = (net_slope / max_slope) * 100
+        else:
+            direction_score = 0
+        is_aligned = False
 
     # Consistency: how many swing points follow the trend
     total_swings = len(high_points) + len(low_points)
@@ -285,6 +296,11 @@ def calculate_trend_strength(df: pd.DataFrame, price_col: str = 'SP500', window:
 
     # Overall strength (0-100)
     strength = min(abs(direction_score), 100)
+
+    # CRITICAL: Cap strength for mixed structure (expansion/contraction)
+    # HH+LL or LH+HL indicates indecision, max strength should be 60
+    if not is_aligned:
+        strength = min(strength, 60)
 
     # Average slope
     avg_slope = (high_slope + low_slope) / 2
