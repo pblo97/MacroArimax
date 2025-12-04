@@ -773,23 +773,281 @@ if st.session_state.get('run_analysis', False):
     with tab2:
         st.header("Detalle de Señales Individuales")
 
+        # Theory expander at the top
+        with st.expander("📚 ¿Qué son las señales individuales?", expanded=False):
+            st.markdown("""
+            ### 🎯 Las 4 señales del Semáforo Ensemble
+
+            El **Semáforo** combina 4 señales complementarias, cada una capturando aspectos diferentes del stress de liquidez:
+
+            #### 1️⃣ **DFM Liquidity Factor** (Dynamic Factor Model + Kalman Filter)
+            - **Qué mide**: Factor latente común que subyace a 15+ series de liquidez (SOFR, EFFR, repo, swaps, etc.)
+            - **Metodología**: Stock & Watson (2002) - Extracción de señal común en datos de alta dimensión
+            - **Interpretación**: Z-score del factor. Valores >2 indican stress sistémico multi-dimensional
+            - **Peso en ensemble**: 30%
+
+            #### 2️⃣ **CUSUM Control Chart** (Cumulative Sum of Deviations)
+            - **Qué mide**: Desviaciones acumuladas de la media histórica, detecta cambios de régimen
+            - **Metodología**: Page (1954) - Control estadístico de procesos aplicado a finanzas
+            - **Interpretación**: Alarma binaria (0/1). Alarma=1 cuando CUSUM excede umbral h=2.0
+            - **Peso en ensemble**: 20%
+
+            #### 3️⃣ **Isolation Forest Anomalies** (Unsupervised ML)
+            - **Qué mide**: Anomalías en patrones multi-dimensionales de liquidez
+            - **Metodología**: Liu et al. (2008) - Detección de outliers por aislamiento
+            - **Interpretación**: Anomaly score -1 a +1. Valores <-0.1 indican comportamiento anómalo
+            - **Peso en ensemble**: 20%
+
+            #### 4️⃣ **Net Liquidity Stress** (Pozsar's Framework)
+            - **Qué mide**: Disponibilidad neta de liquidez en el sistema (Fed Reserves - TGA - RRP)
+            - **Metodología**: Pozsar (2014) - Balance del Fed como proxy de liquidez disponible
+            - **Interpretación**: Z-score de Net Liquidity. Valores <-1 indican drenaje significativo
+            - **Peso en ensemble**: 30%
+
+            ### 🔮 ¿Por qué ensemble?
+
+            **Ventajas de combinar múltiples señales:**
+            - **Reducción de falsos positivos**: Una señal aislada puede dispararse por ruido técnico
+            - **Cobertura multi-dimensional**: Cada señal captura aspectos diferentes (factor común, régimen, anomalías, fundamentales)
+            - **Robustez a shocks**: Si una señal falla (ej: datos faltantes), las otras mantienen el sistema funcional
+
+            ### 📊 Referencias Académicas
+
+            - **Stock & Watson (2002)**: "Forecasting Using Principal Components from a Large Number of Predictors"
+            - **Page (1954)**: "Continuous Inspection Schemes" - CUSUM original
+            - **Liu et al. (2008)**: "Isolation Forest" - Anomaly detection
+            - **Pozsar (2014)**: "Shadow Banking: The Money View" - Net Liquidity framework
+            """)
+
+        # === HERO METRICS: Current Signal Values ===
+        st.subheader("📊 Valores Actuales de Señales")
+
+        hero_col1, hero_col2, hero_col3, hero_col4 = st.columns(4)
+
+        with hero_col1:
+            if len(factor_z) > 0:
+                latest_factor_z = factor_z.iloc[-1]
+                if latest_factor_z > 2.0:
+                    factor_color = "red"
+                    factor_status = "🔴 ALTO"
+                elif latest_factor_z > 1.0:
+                    factor_color = "orange"
+                    factor_status = "🟡 MODERADO"
+                else:
+                    factor_color = "green"
+                    factor_status = "🟢 NORMAL"
+
+                st.markdown(f"""
+                <div style="padding: 15px; border-radius: 10px; border: 3px solid {factor_color}; background-color: rgba(255,255,255,0.05);">
+                    <p style="text-align: center; font-size: 0.8em; color: gray; margin: 0;">DFM Factor</p>
+                    <h3 style="text-align: center; margin: 10px 0;">{latest_factor_z:.2f}</h3>
+                    <p style="text-align: center; font-size: 0.8em; margin: 0;">{factor_status}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("Sin datos")
+
+        with hero_col2:
+            if len(cusum_alarm) > 0:
+                latest_cusum = cusum_alarm.iloc[-1]
+                if latest_cusum == 1:
+                    cusum_color = "red"
+                    cusum_status = "🔴 ALARMA"
+                else:
+                    cusum_color = "green"
+                    cusum_status = "🟢 NORMAL"
+
+                st.markdown(f"""
+                <div style="padding: 15px; border-radius: 10px; border: 3px solid {cusum_color}; background-color: rgba(255,255,255,0.05);">
+                    <p style="text-align: center; font-size: 0.8em; color: gray; margin: 0;">CUSUM</p>
+                    <h3 style="text-align: center; margin: 10px 0;">{'ALARM' if latest_cusum == 1 else 'OK'}</h3>
+                    <p style="text-align: center; font-size: 0.8em; margin: 0;">{cusum_status}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("Sin datos")
+
+        with hero_col3:
+            if 'anomaly_score' in signals.columns and len(signals['anomaly_score'].dropna()) > 0:
+                latest_anomaly = signals['anomaly_score'].iloc[-1]
+                if latest_anomaly < -0.1:
+                    anomaly_color = "red"
+                    anomaly_status = "🔴 ANOMALÍA"
+                elif latest_anomaly < 0:
+                    anomaly_color = "orange"
+                    anomaly_status = "🟡 SOSPECHOSO"
+                else:
+                    anomaly_color = "green"
+                    anomaly_status = "🟢 NORMAL"
+
+                st.markdown(f"""
+                <div style="padding: 15px; border-radius: 10px; border: 3px solid {anomaly_color}; background-color: rgba(255,255,255,0.05);">
+                    <p style="text-align: center; font-size: 0.8em; color: gray; margin: 0;">Isolation Forest</p>
+                    <h3 style="text-align: center; margin: 10px 0;">{latest_anomaly:.3f}</h3>
+                    <p style="text-align: center; font-size: 0.8em; margin: 0;">{anomaly_status}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("Sin datos")
+
+        with hero_col4:
+            if len(nl_stress) > 0:
+                latest_nl_stress = nl_stress.iloc[-1]
+                if latest_nl_stress < -1.0:
+                    nl_color = "red"
+                    nl_status = "🔴 DRENAJE"
+                elif latest_nl_stress < 0:
+                    nl_color = "orange"
+                    nl_status = "🟡 REDUCCIÓN"
+                else:
+                    nl_color = "green"
+                    nl_status = "🟢 EXPANSIÓN"
+
+                st.markdown(f"""
+                <div style="padding: 15px; border-radius: 10px; border: 3px solid {nl_color}; background-color: rgba(255,255,255,0.05);">
+                    <p style="text-align: center; font-size: 0.8em; color: gray; margin: 0;">Net Liquidity</p>
+                    <h3 style="text-align: center; margin: 10px 0;">{latest_nl_stress:.2f}</h3>
+                    <p style="text-align: center; font-size: 0.8em; margin: 0;">{nl_status}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("Sin datos")
+
+        st.markdown("---")
+
+        # === SIGNAL STRENGTH RADAR CHART ===
+        st.subheader("🎯 Radar de Fortaleza de Señales")
+
+        # Prepare data for radar chart
+        if len(factor_z) > 0 and len(cusum_alarm) > 0 and len(nl_stress) > 0:
+            # Normalize all signals to 0-100 scale
+            # DFM: z-score, normalize by mapping [-3, 3] -> [0, 100], then cap
+            dfm_normalized = np.clip((latest_factor_z + 3) / 6 * 100, 0, 100)
+
+            # CUSUM: binary, map 0->0, 1->100
+            cusum_normalized = latest_cusum * 100
+
+            # Isolation Forest: anomaly score [-1, 1] where <-0.1 is bad
+            # Map [-1, 1] -> [100, 0] (inverted, so more negative = higher risk)
+            if 'anomaly_score' in signals.columns and len(signals['anomaly_score'].dropna()) > 0:
+                anomaly_normalized = np.clip((1 - (latest_anomaly + 1) / 2) * 100, 0, 100)
+            else:
+                anomaly_normalized = 0
+
+            # Net Liquidity: z-score, invert because negative = stress
+            # Map [-3, 3] -> [100, 0] (inverted)
+            nl_normalized = np.clip((3 - latest_nl_stress) / 6 * 100, 0, 100)
+
+            radar_data = {
+                'Señal': ['DFM Factor', 'CUSUM', 'Isolation Forest', 'Net Liquidity'],
+                'Stress Level': [dfm_normalized, cusum_normalized, anomaly_normalized, nl_normalized]
+            }
+
+            fig_radar = go.Figure()
+
+            fig_radar.add_trace(go.Scatterpolar(
+                r=radar_data['Stress Level'] + [radar_data['Stress Level'][0]],  # Close the polygon
+                theta=radar_data['Señal'] + [radar_data['Señal'][0]],
+                fill='toself',
+                name='Stress Actual',
+                line=dict(color='red', width=2),
+                fillcolor='rgba(255, 0, 0, 0.3)'
+            ))
+
+            fig_radar.update_layout(
+                polar=dict(
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, 100],
+                        tickvals=[0, 25, 50, 75, 100],
+                        ticktext=['0', '25', '50', '75', '100']
+                    )
+                ),
+                showlegend=True,
+                title="Nivel de Stress por Señal (0=Normal, 100=Máximo Stress)",
+                height=450
+            )
+
+            st.plotly_chart(fig_radar, use_container_width=True)
+
+        st.markdown("---")
+
+        # === INDIVIDUAL SIGNAL TIMELINES (Enhanced) ===
         col1, col2 = st.columns(2)
 
         with col1:
-            # DFM Factor
-            st.subheader("DFM Liquidity Factor")
+            # DFM Factor - Enhanced with filled areas
+            st.subheader("📈 DFM Liquidity Factor (Z-Score)")
             if len(factor_z) > 0:
-                fig = px.line(factor_z, title="Factor Z-Score")
-                st.plotly_chart(fig, use_container_width=True)
+                fig_dfm = go.Figure()
+
+                # Add line
+                fig_dfm.add_trace(go.Scatter(
+                    x=factor_z.index,
+                    y=factor_z.values,
+                    mode='lines',
+                    name='Factor Z-Score',
+                    line=dict(color='blue', width=2),
+                    fill='tonexty',
+                    fillcolor='rgba(0, 100, 255, 0.1)'
+                ))
+
+                # Add threshold zones
+                fig_dfm.add_hline(y=2.0, line_dash="dash", line_color="red",
+                                 annotation_text="Stress Alto (z>2)")
+                fig_dfm.add_hline(y=1.0, line_dash="dash", line_color="orange",
+                                 annotation_text="Stress Moderado (z>1)")
+                fig_dfm.add_hline(y=0, line_dash="solid", line_color="gray",
+                                 annotation_text="Neutral (z=0)")
+
+                fig_dfm.update_layout(
+                    title="Dynamic Factor Model - Último Año",
+                    xaxis_title="Fecha",
+                    yaxis_title="Z-Score",
+                    hovermode='x unified',
+                    height=400
+                )
+
+                st.plotly_chart(fig_dfm, use_container_width=True)
             else:
                 st.info("Insufficient data")
 
         with col2:
-            # CUSUM
-            st.subheader("CUSUM Alerts")
+            # CUSUM - Enhanced with event markers
+            st.subheader("⚠️ CUSUM Control Chart")
             if len(cusum_alarm) > 0:
-                fig = px.line(cusum_alarm, title="CUSUM Alarm Flags")
-                st.plotly_chart(fig, use_container_width=True)
+                fig_cusum = go.Figure()
+
+                # Add alarm flags as markers
+                alarm_dates = cusum_alarm[cusum_alarm == 1].index
+                ok_dates = cusum_alarm[cusum_alarm == 0].index
+
+                fig_cusum.add_trace(go.Scatter(
+                    x=ok_dates,
+                    y=[0] * len(ok_dates),
+                    mode='markers',
+                    name='Normal',
+                    marker=dict(color='green', size=8, symbol='circle')
+                ))
+
+                fig_cusum.add_trace(go.Scatter(
+                    x=alarm_dates,
+                    y=[1] * len(alarm_dates),
+                    mode='markers',
+                    name='Alarma',
+                    marker=dict(color='red', size=12, symbol='x')
+                ))
+
+                fig_cusum.update_layout(
+                    title="CUSUM Alarm Flags - Último Año",
+                    xaxis_title="Fecha",
+                    yaxis_title="Estado",
+                    yaxis=dict(tickvals=[0, 1], ticktext=['Normal', 'Alarma']),
+                    hovermode='x unified',
+                    height=400
+                )
+
+                st.plotly_chart(fig_cusum, use_container_width=True)
             else:
                 st.info("Insufficient data")
 
