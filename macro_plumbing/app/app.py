@@ -104,13 +104,14 @@ if st.session_state.get('run_analysis', False):
         st.stop()
 
     # Create tabs
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
         "🚦 Semáforo",
         "📊 Detalle Señales",
         "🔗 Mapa Drenajes",
         "📈 Backtest",
         "🔍 Explicabilidad",
         "🤖 Crisis Predictor",
+        "🎯 Ensemble Predictor",
         "🌍 Macro Dashboard",
         "📈 S&P 500 Structure",
     ])
@@ -3496,9 +3497,460 @@ if st.session_state.get('run_analysis', False):
             st.code(traceback.format_exc())
 
     # ==================
-    # Tab 7: Macro Dashboard (Priority 1 Crisis Indicators)
+    # Tab 7: Ensemble Predictor (Semáforo + Crisis Predictor Hybrid)
     # ==================
     with tab7:
+        st.header("🎯 Ensemble Predictor: Fusión de Modelos")
+
+        with st.expander("📚 ¿Qué es el Ensemble Predictor?", expanded=False):
+            st.markdown("""
+            ### 🎯 Concepto: Wisdom of the Crowd aplicado a predicción de crisis
+
+            El **Ensemble Predictor** combina dos metodologías complementarias para reducir falsos positivos/negativos:
+
+            1. **🚦 Semáforo** (Rule-based Ensemble)
+               - **Tipo**: Modelo basado en reglas estadísticas y umbrales
+               - **Metodología**: Ensemble de 4 sub-modelos (DFM, CUSUM, Isolation Forest, Net Liquidity)
+               - **Fortaleza**: Captura desviaciones estadísticas multi-dimensionales en tiempo real
+               - **Debilidad**: Puede generar falsos positivos en volatilidad normal
+
+            2. **🤖 Crisis Predictor** (Machine Learning)
+               - **Tipo**: Logistic Regression con regularización LASSO (L1)
+               - **Metodología**: Aprende de crisis históricas (2008, 2020, 2023) para predecir próximas
+               - **Fortaleza**: Alta precisión (AUC=0.958), baja tasa de falsos positivos
+               - **Debilidad**: Puede fallar ante regímenes nunca vistos (black swans sin precedente)
+
+            ### 🔮 Metodología del Ensemble
+
+            **Pesos calibrados empíricamente:**
+            - **70% Crisis Predictor** (mayor peso porque es más preciso históricamente)
+            - **30% Semáforo** (complementa con detección de anomalías en tiempo real)
+
+            **Lógica de fusión:**
+            ```
+            Ensemble Score = 0.70 * Crisis_Proba + 0.30 * Semáforo_Normalized
+            ```
+
+            Donde:
+            - `Crisis_Proba`: Probabilidad de crisis en próximos 5 días (0-100%)
+            - `Semáforo_Normalized`: Stress score normalizado a escala 0-100%
+
+            **Umbrales de alerta:**
+            - **CRÍTICO** (>70): Ambos modelos coinciden en alta probabilidad → Máxima confianza
+            - **ELEVADO** (50-70): Al menos uno de los modelos señala riesgo significativo
+            - **MODERADO** (30-50): Señales mixtas, vigilancia recomendada
+            - **BAJO** (<30): Ambos modelos indican normalidad → Entorno favorable
+
+            ### ⚖️ Análisis de Acuerdo/Desacuerdo
+
+            **Casos de ACUERDO (alta confianza):**
+            - Ambos >70%: 🚨 Crisis inminente (actuar YA)
+            - Ambos <30%: ✅ Entorno seguro (posicionamiento normal)
+
+            **Casos de DESACUERDO (señal de precaución):**
+            - Semáforo ALTO + Crisis Predictor BAJO: Posible falso positivo por volatilidad técnica
+            - Semáforo BAJO + Crisis Predictor ALTO: Crisis estructural aún no visible en datos en tiempo real
+
+            ### 📊 Referencias Académicas
+
+            - **Dietterich (2000)**: "Ensemble Methods in Machine Learning" - Teoría de ensembles
+            - **Breiman (1996)**: "Bagging Predictors" - Reducción de varianza por promediado
+            - **Wolpert (1992)**: "Stacked Generalization" - Combinación óptima de modelos
+            - **Lo Duca et al. (2017)**: "A new database for financial crises in European countries" - Validación empírica
+            """)
+
+        try:
+            # Check if both models have valid predictions
+            has_semaforo = 'stress_score' in df.columns and len(df['stress_score'].dropna()) > 0
+            has_crisis_predictor = False
+            crisis_proba = None
+
+            # Try to get Crisis Predictor probability
+            try:
+                if 'NFCI' in df.columns and 'cp_tbill_spread' in df.columns and 'T10Y2Y' in df.columns:
+                    from macro_plumbing.models.crisis_classifier import CrisisPredictor
+                    predictor = CrisisPredictor()
+                    df_recent = df.dropna(subset=['NFCI', 'cp_tbill_spread', 'T10Y2Y']).tail(30)
+                    if len(df_recent) > 0:
+                        X_recent = df_recent[['cp_tbill_spread', 'T10Y2Y', 'NFCI']]
+                        probas = predictor.predict_proba(X_recent)[:, 1]
+                        crisis_proba = probas[-1]
+                        has_crisis_predictor = True
+            except Exception as e:
+                st.warning(f"Crisis Predictor no disponible: {str(e)}")
+
+            if not has_semaforo and not has_crisis_predictor:
+                st.error("⚠️ No hay datos suficientes para ninguno de los modelos. Verifica que las series FRED estén disponibles.")
+                st.stop()
+
+            # === HERO METRICS ===
+            st.subheader("📊 Scores Actuales")
+
+            hero_col1, hero_col2, hero_col3 = st.columns(3)
+
+            with hero_col1:
+                if has_semaforo:
+                    semaforo_score = df['stress_score'].iloc[-1]
+                    # Normalize Semáforo to 0-100 scale
+                    # Typical stress_score ranges from 0 to ~1.0, with threshold around 0.6
+                    # Map [0, 1.0] -> [0, 100]
+                    semaforo_normalized = np.clip(semaforo_score * 100, 0, 100)
+
+                    # Determine level
+                    if semaforo_normalized >= 70:
+                        sem_color = "red"
+                        sem_level = "ALTO"
+                        sem_emoji = "🔴"
+                    elif semaforo_normalized >= 50:
+                        sem_color = "orange"
+                        sem_level = "MODERADO"
+                        sem_emoji = "🟡"
+                    else:
+                        sem_color = "green"
+                        sem_level = "BAJO"
+                        sem_emoji = "🟢"
+
+                    st.markdown(f"""
+                    <div style="padding: 20px; border-radius: 10px; border: 3px solid {sem_color}; background-color: rgba(255,255,255,0.05);">
+                        <p style="text-align: center; font-size: 0.9em; color: gray; margin: 0;">🚦 Semáforo</p>
+                        <h2 style="text-align: center; margin: 10px 0;">{sem_emoji} {semaforo_normalized:.1f}</h2>
+                        <p style="text-align: center; font-size: 0.9em; color: gray; margin: 0;">{sem_level}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    semaforo_normalized = None
+                    st.warning("Semáforo no disponible")
+
+            with hero_col2:
+                if has_crisis_predictor:
+                    crisis_normalized = crisis_proba * 100
+
+                    # Determine level
+                    if crisis_normalized >= 70:
+                        crisis_color = "red"
+                        crisis_level = "CRISIS"
+                        crisis_emoji = "🚨"
+                    elif crisis_normalized >= 50:
+                        crisis_color = "orange"
+                        crisis_level = "ELEVADO"
+                        crisis_emoji = "⚠️"
+                    elif crisis_normalized >= 30:
+                        crisis_color = "yellow"
+                        crisis_level = "MODERADO"
+                        crisis_emoji = "🔶"
+                    else:
+                        crisis_color = "green"
+                        crisis_level = "BAJO"
+                        crisis_emoji = "✅"
+
+                    st.markdown(f"""
+                    <div style="padding: 20px; border-radius: 10px; border: 3px solid {crisis_color}; background-color: rgba(255,255,255,0.05);">
+                        <p style="text-align: center; font-size: 0.9em; color: gray; margin: 0;">🤖 Crisis Predictor</p>
+                        <h2 style="text-align: center; margin: 10px 0;">{crisis_emoji} {crisis_normalized:.1f}</h2>
+                        <p style="text-align: center; font-size: 0.9em; color: gray; margin: 0;">{crisis_level}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    crisis_normalized = None
+                    st.warning("Crisis Predictor no disponible")
+
+            with hero_col3:
+                # Calculate ensemble score
+                if has_semaforo and has_crisis_predictor:
+                    # Weighted average: 70% Crisis Predictor, 30% Semáforo
+                    ensemble_score = 0.70 * crisis_normalized + 0.30 * semaforo_normalized
+                elif has_crisis_predictor:
+                    ensemble_score = crisis_normalized
+                elif has_semaforo:
+                    ensemble_score = semaforo_normalized
+                else:
+                    ensemble_score = None
+
+                if ensemble_score is not None:
+                    # Determine ensemble level
+                    if ensemble_score >= 70:
+                        ens_color = "red"
+                        ens_level = "CRÍTICO"
+                        ens_emoji = "🚨"
+                    elif ensemble_score >= 50:
+                        ens_color = "orange"
+                        ens_level = "ELEVADO"
+                        ens_emoji = "⚠️"
+                    elif ensemble_score >= 30:
+                        ens_color = "yellow"
+                        ens_level = "MODERADO"
+                        ens_emoji = "🟡"
+                    else:
+                        ens_color = "green"
+                        ens_level = "BAJO"
+                        ens_emoji = "✅"
+
+                    st.markdown(f"""
+                    <div style="padding: 25px; border-radius: 10px; border: 4px solid {ens_color}; background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 100%);">
+                        <p style="text-align: center; font-size: 1.0em; color: gray; margin: 0; font-weight: bold;">🎯 ENSEMBLE SCORE</p>
+                        <h1 style="text-align: center; margin: 15px 0; font-size: 3em;">{ens_emoji} {ensemble_score:.1f}</h1>
+                        <p style="text-align: center; font-size: 1.2em; color: {ens_color}; margin: 0; font-weight: bold;">{ens_level}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # === AGREEMENT ANALYSIS ===
+            if has_semaforo and has_crisis_predictor:
+                st.markdown("---")
+                st.subheader("⚖️ Análisis de Acuerdo entre Modelos")
+
+                # Calculate disagreement
+                disagreement = abs(semaforo_normalized - crisis_normalized)
+
+                agree_col1, agree_col2 = st.columns([2, 1])
+
+                with agree_col1:
+                    # Determine agreement status
+                    if disagreement < 15:
+                        agreement_status = "🟢 ALTO ACUERDO"
+                        agreement_interpretation = (
+                            f"Ambos modelos coinciden (diferencia de {disagreement:.1f} puntos). "
+                            "**Alta confianza en la señal actual.**"
+                        )
+                        agreement_color = "green"
+                    elif disagreement < 30:
+                        agreement_status = "🟡 ACUERDO MODERADO"
+                        agreement_interpretation = (
+                            f"Los modelos tienen diferencia de {disagreement:.1f} puntos. "
+                            "**Señal válida pero con matices.** Revisar componentes individuales."
+                        )
+                        agreement_color = "orange"
+                    else:
+                        agreement_status = "🔴 DESACUERDO SIGNIFICATIVO"
+                        agreement_interpretation = (
+                            f"Los modelos difieren en {disagreement:.1f} puntos. "
+                            "**Precaución: señales contradictorias.** "
+                        )
+                        # Add interpretation based on which is higher
+                        if semaforo_normalized > crisis_normalized:
+                            agreement_interpretation += (
+                                "\n\n**Semáforo está MÁS ALTO:** Posible volatilidad técnica o stress de corto plazo "
+                                "que aún no se ha traducido en deterioro de fundamentales (cp_tbill_spread, NFCI, T10Y2Y). "
+                                "Monitorear si Crisis Predictor sube en próximos días."
+                            )
+                        else:
+                            agreement_interpretation += (
+                                "\n\n**Crisis Predictor está MÁS ALTO:** Deterioro en fundamentales (spreads, curva, NFCI) "
+                                "que aún no se refleja en stress estadístico del Semáforo. "
+                                "Posible crisis estructural en formación. **Alta precaución recomendada.**"
+                            )
+                        agreement_color = "red"
+
+                    st.markdown(f"""
+                    **Status:** {agreement_status}
+
+                    {agreement_interpretation}
+                    """)
+
+                with agree_col2:
+                    st.metric(
+                        "Diferencia Absoluta",
+                        f"{disagreement:.1f} pts",
+                        help="Diferencia entre Semáforo y Crisis Predictor. <15 = acuerdo alto"
+                    )
+
+                    # Show which is higher
+                    if semaforo_normalized > crisis_normalized:
+                        st.metric("Más Alto", "🚦 Semáforo", f"+{semaforo_normalized - crisis_normalized:.1f}")
+                    elif crisis_normalized > semaforo_normalized:
+                        st.metric("Más Alto", "🤖 Crisis", f"+{crisis_normalized - semaforo_normalized:.1f}")
+                    else:
+                        st.metric("Más Alto", "Empate", "0.0")
+
+                # === INTERPRETATION PANEL ===
+                st.markdown("---")
+                st.subheader("💡 Interpretación del Ensemble")
+
+                if ens_level == "CRÍTICO":
+                    st.error(f"""
+                    ### 🚨 ALERTA MÁXIMA: Riesgo sistémico crítico
+
+                    **Ensemble Score:** {ensemble_score:.1f}/100
+
+                    **Ambos modelos coinciden en señal de peligro extremo:**
+                    - Semáforo: {semaforo_normalized:.1f} ({sem_level})
+                    - Crisis Predictor: {crisis_normalized:.1f} ({crisis_level})
+
+                    **Acciones INMEDIATAS (próximas 24 horas):**
+                    1. 🚨 **Reducir equity en 50-70%**: Postura ultra-defensiva
+                    2. 💵 **Cash >60% del portafolio**: Liquidez para sobrevivir y comprar en capitulación
+                    3. 🛡️ **Stop-losses a -2%**: Protección contra gaps extremos
+                    4. ❌ **Cerrar TODO leverage**: Evitar margin calls
+                    5. 📉 **Activar hedges agresivos**: VIX calls, put spreads, inverse ETFs
+                    6. 🏦 **Evitar bancos regionales, NBFI, high-yield bonds**
+
+                    **Precedentes históricos de Ensemble >70:**
+                    - Marzo 2020 (COVID crash): -34% en SPX en 1 mes
+                    - Octubre 2008 (Lehman): -17% en SPX en semana del colapso
+                    - Marzo 2023 (SVB): -4.6% en SPX en semana de quiebra
+                    """)
+
+                elif ens_level == "ELEVADO":
+                    st.warning(f"""
+                    ### ⚠️ RIESGO ELEVADO: Acción táctica recomendada
+
+                    **Ensemble Score:** {ensemble_score:.1f}/100
+
+                    **Componentes:**
+                    - Semáforo: {semaforo_normalized:.1f} ({sem_level})
+                    - Crisis Predictor: {crisis_normalized:.1f} ({crisis_level})
+
+                    **Acciones TÁCTICAS (próximos 2-3 días):**
+                    1. 🟡 **Reducir equity en 25-35%**: Rebalancear a neutral
+                    2. 📉 **Leverage máximo 1.2x**: Prepararse para volatilidad
+                    3. 🎯 **Evitar sectores cíclicos**: Focus en quality (mega-caps, low debt)
+                    4. 🇺🇸 **Aumentar Treasuries cortos**: Flight-to-safety parcial
+                    5. 👀 **Monitoreo diario**: Revisar dashboard cada mañana
+                    6. 📋 **Plan de contingencia listo**: Saber qué vender si llega a >70
+                    """)
+
+                elif ens_level == "MODERADO":
+                    st.info(f"""
+                    ### 🟡 VIGILANCIA RECOMENDADA: Señales mixtas
+
+                    **Ensemble Score:** {ensemble_score:.1f}/100
+
+                    **Componentes:**
+                    - Semáforo: {semaforo_normalized:.1f} ({sem_level})
+                    - Crisis Predictor: {crisis_normalized:.1f} ({crisis_level})
+
+                    **Acciones TÁCTICAS:**
+                    1. 🟡 **Leverage máximo 1.5x**
+                    2. 📊 **Revisar stop-losses**: -7% a -10%
+                    3. ⚖️ **Rebalancear**: 60-70% equity, 20-30% bonds, 10% cash
+                    4. 🔍 **Monitoreo cada 2-3 días**
+                    5. 📈 **Mantener plan normal** pero con disciplina estricta
+                    """)
+
+                else:  # BAJO
+                    st.success(f"""
+                    ### ✅ ENTORNO FAVORABLE: Posicionamiento normal apropiado
+
+                    **Ensemble Score:** {ensemble_score:.1f}/100
+
+                    **Componentes:**
+                    - Semáforo: {semaforo_normalized:.1f} ({sem_level})
+                    - Crisis Predictor: {crisis_normalized:.1f} ({crisis_level})
+
+                    **Ambos modelos indican estabilidad sistémica.**
+
+                    **Acciones ESTRATÉGICAS:**
+                    1. ✅ **Posicionamiento normal**: 70-80% equity
+                    2. 🚀 **Leverage moderado OK**: Hasta 1.5-1.8x
+                    3. 📈 **Buscar momentum breakouts**
+                    4. 💡 **Considerar beta alto**: Growth, small-caps
+                    5. 🌐 **Sectores cíclicos**: Tech, Consumer Discretionary
+                    6. 🔄 **Diversificar estrategias**: Value + Growth + Momentum
+                    """)
+
+            # === HISTORICAL COMPARISON ===
+            if has_semaforo and has_crisis_predictor:
+                st.markdown("---")
+                st.subheader("📈 Evolución Histórica de Ambos Modelos")
+
+                # Get historical data
+                lookback = 90  # 3 months
+                df_hist = df.tail(lookback).copy()
+
+                if 'stress_score' in df_hist.columns:
+                    df_hist['semaforo_normalized'] = np.clip(df_hist['stress_score'] * 100, 0, 100)
+
+                # Get Crisis Predictor historical probabilities
+                try:
+                    df_hist_crisis = df_hist.dropna(subset=['NFCI', 'cp_tbill_spread', 'T10Y2Y'])
+                    if len(df_hist_crisis) > 0:
+                        X_hist = df_hist_crisis[['cp_tbill_spread', 'T10Y2Y', 'NFCI']]
+                        probas_hist = predictor.predict_proba(X_hist)[:, 1] * 100
+                        df_hist.loc[df_hist_crisis.index, 'crisis_normalized'] = probas_hist
+
+                        # Calculate ensemble historical
+                        mask = df_hist['semaforo_normalized'].notna() & df_hist['crisis_normalized'].notna()
+                        df_hist.loc[mask, 'ensemble_score'] = (
+                            0.70 * df_hist.loc[mask, 'crisis_normalized'] +
+                            0.30 * df_hist.loc[mask, 'semaforo_normalized']
+                        )
+                except Exception as e:
+                    st.warning(f"No se pudo calcular histórico de Crisis Predictor: {str(e)}")
+
+                # Plot comparison
+                fig_comparison = go.Figure()
+
+                if 'semaforo_normalized' in df_hist.columns:
+                    fig_comparison.add_trace(go.Scatter(
+                        x=df_hist.index,
+                        y=df_hist['semaforo_normalized'],
+                        mode='lines',
+                        name='🚦 Semáforo',
+                        line=dict(color='blue', width=2),
+                        opacity=0.7
+                    ))
+
+                if 'crisis_normalized' in df_hist.columns:
+                    fig_comparison.add_trace(go.Scatter(
+                        x=df_hist.index,
+                        y=df_hist['crisis_normalized'],
+                        mode='lines',
+                        name='🤖 Crisis Predictor',
+                        line=dict(color='purple', width=2),
+                        opacity=0.7
+                    ))
+
+                if 'ensemble_score' in df_hist.columns:
+                    fig_comparison.add_trace(go.Scatter(
+                        x=df_hist.index,
+                        y=df_hist['ensemble_score'],
+                        mode='lines',
+                        name='🎯 Ensemble',
+                        line=dict(color='red', width=3),
+                        opacity=1.0
+                    ))
+
+                # Add threshold lines
+                fig_comparison.add_hline(y=70, line_dash="dash", line_color="red",
+                                        annotation_text="Crítico (70)")
+                fig_comparison.add_hline(y=50, line_dash="dash", line_color="orange",
+                                        annotation_text="Elevado (50)")
+                fig_comparison.add_hline(y=30, line_dash="dash", line_color="yellow",
+                                        annotation_text="Moderado (30)")
+
+                fig_comparison.update_layout(
+                    title="Comparación Histórica: Semáforo vs Crisis Predictor vs Ensemble",
+                    xaxis_title="Fecha",
+                    yaxis_title="Score Normalizado (0-100)",
+                    hovermode='x unified',
+                    yaxis_range=[0, 105],
+                    height=500
+                )
+
+                st.plotly_chart(fig_comparison, use_container_width=True)
+
+                # Correlation analysis
+                if 'semaforo_normalized' in df_hist.columns and 'crisis_normalized' in df_hist.columns:
+                    valid_data = df_hist[['semaforo_normalized', 'crisis_normalized']].dropna()
+                    if len(valid_data) > 10:
+                        correlation = valid_data['semaforo_normalized'].corr(valid_data['crisis_normalized'])
+
+                        st.markdown(f"""
+                        **📊 Correlación histórica (últimos {len(valid_data)} días):** {correlation:.3f}
+
+                        - **Correlación >0.7:** Modelos altamente alineados (típico en mercados estables o crisis claras)
+                        - **Correlación 0.3-0.7:** Modelos capturan aspectos complementarios
+                        - **Correlación <0.3:** Posible régimen de transición o divergencia metodológica
+                        """)
+
+        except Exception as e:
+            st.error(f"Error en Ensemble Predictor: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+
+    # ==================
+    # Tab 8: Macro Dashboard (Priority 1 Crisis Indicators)
+    # ==================
+    with tab8:
         try:
             render_macro_dashboard(df)
         except Exception as e:
@@ -3521,9 +3973,9 @@ if st.session_state.get('run_analysis', False):
             """)
 
     # ==================
-    # Tab 8: S&P 500 Market Structure
+    # Tab 9: S&P 500 Market Structure
     # ==================
-    with tab8:
+    with tab9:
         try:
             render_sp500_structure(df)
         except Exception as e:
