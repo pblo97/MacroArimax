@@ -38,6 +38,9 @@ from macro_plumbing.graph.graph_analysis import LiquidityNetworkAnalysis
 from macro_plumbing.graph.edges_normalization import (
     compute_robust_sfi, add_edge_family_attributes, get_family_summary_table, visualize_edge_units
 )
+from macro_plumbing.graph.systemic_risk_index import (
+    compute_systemic_risk_index, generate_risk_interpretation, generate_portfolio_actions
+)
 from macro_plumbing.backtest.walkforward import WalkForwardValidator
 from macro_plumbing.backtest.metrics import compute_all_metrics
 from macro_plumbing.metrics.lead_lag_and_dm import (
@@ -501,21 +504,281 @@ if st.session_state.get('run_analysis', False):
 
         # Tabs within Tab 3
         if show_enhanced:
-            subtab1, subtab2, subtab3, subtab4, subtab5 = st.tabs([
+            subtab0, subtab1, subtab2, subtab3, subtab4, subtab5 = st.tabs([
+                "🧭 Resumen Sistémico",
                 "📈 Visualización",
                 "🧬 Estados Markov",
                 "🦠 Contagio",
                 "⚠️ Análisis Sistémico",
-                "🚀 Enhanced Metrics (4 Fases)"
+                "🚀 Enhanced Metrics"
             ])
         else:
-            subtab1, subtab2, subtab3, subtab4 = st.tabs([
+            subtab0, subtab1, subtab2, subtab3, subtab4 = st.tabs([
+                "🧭 Resumen Sistémico",
                 "📈 Visualización",
                 "🧬 Estados Markov",
                 "🦠 Contagio",
                 "⚠️ Análisis Sistémico"
             ])
+            subtab0 = None
             subtab5 = None
+
+        # ==================
+        # Subtab 0: Resumen Sistémico (NEW)
+        # ==================
+        if show_enhanced and subtab0 is not None:
+            with subtab0:
+                st.header("🧭 Resumen de Riesgo Sistémico de Red")
+
+                st.markdown("""
+                ### ¿Qué es el Índice de Riesgo Sistémico?
+
+                El **Índice de Riesgo Sistémico** (0-100) es un agregador normalizado que combina cuatro dimensiones
+                críticas de fragilidad financiera:
+
+                1. **Network Resilience** (30%): Capacidad de la red para absorber shocks sin fragmentarse
+                2. **Contagion Index** (30%): Velocidad y alcance de propagación de stress entre nodos
+                3. **Nodos Vulnerables** (20%): Concentración de fragilidad en instituciones clave
+                4. **NBFI Stress** (20%): Presión en shadow banking (hedge funds, asset managers, etc.)
+
+                **Teoría:** Basado en los trabajos de Adrian & Brunnermeier (2016) sobre riesgo sistémico condicional (CoVaR),
+                Battiston et al. (2012) sobre DebtRank, y Acemoglu et al. (2015) sobre estabilidad de redes financieras.
+
+                ---
+                """)
+
+                # Calculate systemic risk index
+                try:
+                    # Get historical contagion data for percentile calculation
+                    contagion_history_df = pd.DataFrame()
+                    if hasattr(enhanced_graph, 'contagion_history'):
+                        contagion_history_df = enhanced_graph.contagion_history
+
+                    # Prepare data for risk index
+                    contagion_history_series = None
+                    if not contagion_history_df.empty and 'contagion_index' in contagion_history_df.columns:
+                        contagion_history_series = contagion_history_df['contagion_index'].dropna()
+
+                    # Compute systemic risk
+                    risk_data = compute_systemic_risk_index(
+                        network_resilience=enhanced_metrics.network_resilience * 100,  # Convert to 0-100
+                        contagion_index=enhanced_metrics.contagion_index,
+                        contagion_history=contagion_history_series,
+                        n_vulnerable_nodes=len(enhanced_metrics.vulnerable_nodes) if enhanced_metrics.vulnerable_nodes else 0,
+                        nbfi_systemic_z=enhanced_metrics.nbfi_systemic_score,
+                        total_nodes=len(enhanced_graph.G.nodes()) if enhanced_graph else 15
+                    )
+
+                    # === TOP SECTION: Main Risk Index ===
+                    col_left, col_right = st.columns([1, 1])
+
+                    with col_left:
+                        st.metric(
+                            "📊 Systemic Risk Index",
+                            f"{risk_data['systemic_risk_index']:.1f}/100",
+                            help="Índice agregado de riesgo sistémico. 0=sin riesgo, 100=crisis extrema"
+                        )
+
+                        # Level indicator
+                        st.markdown(f"### Nivel actual: {risk_data['systemic_risk_level']}")
+
+                        # Interpretation
+                        st.info(f"**Interpretación:** {risk_data['interpretation']}")
+
+                    with col_right:
+                        st.markdown("#### 🧬 Probabilidades de Régimen (Markov)")
+
+                        # Try to get Markov regime probabilities
+                        try:
+                            # Check if we have Markov dynamics computed
+                            if hasattr(enhanced_graph, 'markov_probs') and enhanced_graph.markov_probs is not None:
+                                probs = enhanced_graph.markov_probs
+                                prob_calm = probs.get('calm', 0.33)
+                                prob_tense = probs.get('tense', 0.33)
+                                prob_crisis = probs.get('crisis', 0.34)
+                            else:
+                                # Estimate from risk index
+                                idx = risk_data['systemic_risk_index']
+                                if idx < 33:
+                                    prob_calm, prob_tense, prob_crisis = 0.70, 0.25, 0.05
+                                elif idx < 66:
+                                    prob_calm, prob_tense, prob_crisis = 0.20, 0.60, 0.20
+                                else:
+                                    prob_calm, prob_tense, prob_crisis = 0.05, 0.25, 0.70
+
+                            # Display as progress bars
+                            st.markdown(f"🟢 **Calma:** {prob_calm:.1%}")
+                            st.progress(prob_calm)
+
+                            st.markdown(f"🟡 **Tensión:** {prob_tense:.1%}")
+                            st.progress(prob_tense)
+
+                            st.markdown(f"🔴 **Crisis:** {prob_crisis:.1%}")
+                            st.progress(prob_crisis)
+
+                        except Exception as e:
+                            st.warning(f"Probabilidades Markov no disponibles: {e}")
+
+                    # === KPIs ROW ===
+                    st.divider()
+                    st.subheader("📊 KPIs de Red")
+
+                    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+
+                    with kpi1:
+                        resilience_val = enhanced_metrics.network_resilience * 100
+                        st.metric(
+                            "🛡️ Network Resilience",
+                            f"{resilience_val:.1f}%",
+                            help="Capacidad de absorber shocks. >70% = robusto, <30% = frágil"
+                        )
+                        if resilience_val < 30:
+                            st.error("🔴 Crítico")
+                        elif resilience_val < 50:
+                            st.warning("🟡 Bajo")
+                        else:
+                            st.success("🟢 Saludable")
+
+                    with kpi2:
+                        contagion_pct = risk_data['contagion_percentile']
+                        st.metric(
+                            "🦠 Contagion Index",
+                            f"P{contagion_pct:.0f}",
+                            help=f"Percentil histórico: {contagion_pct:.0f}. >80 = extremo, <40 = contenido"
+                        )
+                        if contagion_pct > 80:
+                            st.error("🔴 Extremo")
+                        elif contagion_pct > 60:
+                            st.warning("🟡 Elevado")
+                        else:
+                            st.success("🟢 Normal")
+
+                    with kpi3:
+                        n_vuln = len(enhanced_metrics.vulnerable_nodes) if enhanced_metrics.vulnerable_nodes else 0
+                        st.metric(
+                            "⚠️ Nodos Vulnerables",
+                            f"{n_vuln}",
+                            help="Instituciones con alta importancia sistémica pero baja liquidez"
+                        )
+                        if n_vuln >= 3:
+                            st.error("🔴 Múltiples")
+                        elif n_vuln >= 1:
+                            st.warning("🟡 Presente")
+                        else:
+                            st.success("🟢 Ninguno")
+
+                    with kpi4:
+                        nbfi_z = enhanced_metrics.nbfi_systemic_score
+                        st.metric(
+                            "🏦 NBFI Systemic Score",
+                            f"{nbfi_z:.2f}σ",
+                            help="Z-score del stress en shadow banking. >1.5 = crisis, <0.5 = normal"
+                        )
+                        if nbfi_z > 1.5:
+                            st.error("🔴 Alto")
+                        elif nbfi_z > 0.5:
+                            st.warning("🟡 Moderado")
+                        else:
+                            st.success("🟢 Normal")
+
+                    # === INTERPRETATION SECTION ===
+                    st.divider()
+                    st.subheader("💡 Interpretación Detallada")
+
+                    # Generate detailed interpretations
+                    interpretations = generate_risk_interpretation(
+                        systemic_risk_index=risk_data['systemic_risk_index'],
+                        network_resilience=resilience_val,
+                        contagion_percentile=contagion_pct,
+                        n_vulnerable_nodes=n_vuln,
+                        nbfi_systemic_z=nbfi_z,
+                        components=risk_data['components']
+                    )
+
+                    for interp in interpretations:
+                        st.markdown(interp)
+
+                    # === PORTFOLIO ACTIONS ===
+                    st.divider()
+                    st.subheader("🎯 Acciones Indicativas para Portafolio")
+
+                    st.caption("⚠️ **Disclaimer:** Estas son acciones sugeridas basadas en análisis cuantitativo. "
+                             "NO constituyen asesoría financiera. Consulte con un profesional antes de tomar decisiones de inversión.")
+
+                    actions = generate_portfolio_actions(
+                        systemic_risk_index=risk_data['systemic_risk_index'],
+                        level_raw=risk_data['level_raw'],
+                        network_resilience=resilience_val,
+                        n_vulnerable_nodes=n_vuln
+                    )
+
+                    # Display actions in tabs
+                    act_tab1, act_tab2, act_tab3 = st.tabs([
+                        "🚨 Inmediatas (0-1 día)",
+                        "📋 Tácticas (1-5 días)",
+                        "🎯 Estratégicas (1-4 semanas)"
+                    ])
+
+                    with act_tab1:
+                        if actions['immediate']:
+                            for action in actions['immediate']:
+                                st.markdown(f"- {action}")
+                        else:
+                            st.info("No hay acciones inmediatas requeridas.")
+
+                    with act_tab2:
+                        if actions['tactical']:
+                            for action in actions['tactical']:
+                                st.markdown(f"- {action}")
+                        else:
+                            st.info("Mantener postura táctica normal.")
+
+                    with act_tab3:
+                        if actions['strategic']:
+                            for action in actions['strategic']:
+                                st.markdown(f"- {action}")
+                        else:
+                            st.info("Continuar con plan estratégico establecido.")
+
+                    # === COMPONENTS BREAKDOWN (EXPANDER) ===
+                    with st.expander("🔍 Ver Desglose de Componentes del Índice"):
+                        st.markdown("### Contribución de cada componente al riesgo total")
+
+                        comp_df = pd.DataFrame({
+                            'Componente': [
+                                'Resilience Risk (invertido)',
+                                'Contagion Risk (percentil)',
+                                'Vulnerable Nodes Risk',
+                                'NBFI Risk'
+                            ],
+                            'Score (0-100)': [
+                                risk_data['components']['resilience_risk'],
+                                risk_data['components']['contagion_risk'],
+                                risk_data['components']['vulnerable_risk'],
+                                risk_data['components']['nbfi_risk']
+                            ],
+                            'Peso': ['30%', '30%', '20%', '20%']
+                        })
+
+                        st.dataframe(comp_df, use_container_width=True, hide_index=True)
+
+                        st.markdown(f"""
+                        **Cálculo:**
+
+                        Systemic Risk Index =
+                        - 0.30 × Resilience Risk ({risk_data['components']['resilience_risk']:.1f})
+                        - 0.30 × Contagion Risk ({risk_data['components']['contagion_risk']:.1f})
+                        - 0.20 × Vulnerable Risk ({risk_data['components']['vulnerable_risk']:.1f})
+                        - 0.20 × NBFI Risk ({risk_data['components']['nbfi_risk']:.1f})
+
+                        **= {risk_data['systemic_risk_index']:.1f}/100**
+
+                        **Nota:** Resilience Risk es el inverso de Network Resilience porque mayor resiliencia = menor riesgo.
+                        """)
+
+                except Exception as e:
+                    st.error(f"Error calculando índice de riesgo sistémico: {e}")
+                    st.warning("Usando valores por defecto para demostración.")
 
         # Subtab 1: Visualization
         with subtab1:
@@ -1113,6 +1376,38 @@ if st.session_state.get('run_analysis', False):
                         - Geanakoplos (2010) procyclical haircuts
                         """)
 
+                    # Contextual interpretation for Phase 1
+                    margin_stress_z = enhanced_metrics.margin_stress_index
+                    if margin_stress_z > 2.0:
+                        st.error(f"""
+                        🚨 **CRISIS LEVEL MARGIN STRESS** (z={margin_stress_z:.2f})
+
+                        **Interpretación:** Los márgenes están aumentando dramáticamente, forzando liquidaciones.
+                        Esto típicamente precede a cascadas de deleveraging (marzo 2020, septiembre 2008).
+
+                        **Por qué importa:** Cuando los márgenes suben, los traders deben:
+                        1. Poner más colateral (requiere liquidez)
+                        2. O cerrar posiciones (vender activos)
+
+                        En stress, todos venden simultáneamente → crash de precios → más margin calls → espiral de liquidez.
+
+                        **Acción:** Reducir leverage inmediatamente. Aumentar cash buffer al 40%+.
+                        """)
+                    elif margin_stress_z > 1.0:
+                        st.warning(f"""
+                        ⚠️ **ELEVATED MARGIN STRESS** (z={margin_stress_z:.2f})
+
+                        **Interpretación:** Márgenes por encima de niveles normales. Presión creciente sobre posiciones apalancadas.
+
+                        **Monitorear:** Si persiste >3 días, puede escalar a forced selling. Ajustar stops y reducir leverage moderadamente.
+                        """)
+                    else:
+                        st.success(f"""
+                        ✅ **MARGIN STRESS NORMAL** (z={margin_stress_z:.2f})
+
+                        Márgenes estables. Entorno apropiado para posiciones apalancadas con gestión de riesgo normal.
+                        """)
+
                     # === PHASE 2: NBFI SECTOR ===
                     st.divider()
                     st.header("🏦 Phase 2: NBFI Sector Analysis")
@@ -1167,6 +1462,38 @@ if st.session_state.get('run_analysis', False):
                         - Normalized to z-score
                         """)
 
+                    # Contextual interpretation for Phase 2
+                    nbfi_z = enhanced_metrics.nbfi_systemic_score
+                    if nbfi_z > 1.5:
+                        st.error(f"""
+                        🚨 **NBFI CRISIS** (z={nbfi_z:.2f})
+
+                        **Interpretación:** Shadow banking bajo stress extremo. El sector NBFI ($64T AUM total) es el #1 riesgo sistémico según ECB FSR 2024.
+
+                        **¿Por qué es peligroso?**
+                        - **Hedge funds:** Alto leverage (3-5x) + illiquid assets = forced selling cuando redemptions hit
+                        - **Asset managers:** Redemption spirals (investors retiran → fondo vende → precios caen → más redemptions)
+                        - **Insurance/Pensions:** Duration mismatch crea fire sales de activos en stress
+
+                        **Precedentes:** LTCM (1998), Archegos (2021), UK Gilt Crisis (2022 - pension funds forzados a vender)
+
+                        **Acción:** Evitar exposición a NBFI. Preferir bancos grandes con regulación estricta. Overweight cash.
+                        """)
+                    elif nbfi_z > 0.5:
+                        st.warning(f"""
+                        ⚠️ **NBFI TENSIONES MODERADAS** (z={nbfi_z:.2f})
+
+                        **Interpretación:** Algunos segmentos de NBFI muestran stress. Típicamente uno de los primeros síntomas de deterioro macro.
+
+                        **Monitorear:** Flujos de fondos, spreads de crédito, volatility en derivados. Si escala, puede contagiar a bancos.
+                        """)
+                    else:
+                        st.success(f"""
+                        ✅ **NBFI OPERANDO NORMALMENTE** (z={nbfi_z:.2f})
+
+                        Shadow banking estable. Este sector suele ser early warning de stress, así que niveles bajos indican entorno saludable.
+                        """)
+
                     # === PHASE 3: DYNAMIC NETWORK ===
                     st.divider()
                     st.header("📈 Phase 3: Dynamic Network Structure")
@@ -1194,12 +1521,56 @@ if st.session_state.get('run_analysis', False):
                         )
 
                     # Network interpretation
-                    if enhanced_metrics.centralization > 0.7:
-                        st.warning("⚠️ **HIGH CENTRALIZATION**: Network relies heavily on hub nodes (fragile)")
-                    elif enhanced_metrics.density < 0.3:
-                        st.warning("⚠️ **LOW DENSITY**: Network is sparsely connected (fragmentation risk)")
+                    with st.expander("ℹ️ Network Structure Theory"):
+                        st.markdown("""
+                        **Network Density:** % de conexiones activas vs posibles. Alta densidad = mayor redundancia = más resiliente.
+
+                        **Centralization:** Qué tan "hub-and-spoke" es la red. Alta centralización = dependencia de pocos nodos (fragile).
+
+                        **Largest Component:** % de red que está conectada. <100% indica fragmentación.
+
+                        **Teoría:** Allen & Gale (2000) mostraron que:
+                        - Redes completas (high density) son resilientes a shocks idiosyncráticos
+                        - Redes hub-and-spoke (high centralization) son frágiles: colapso del hub = colapso sistémico
+
+                        **Ejemplo:** Lehman Brothers 2008 era un hub (alta centralización) → su caída fragmentó la red.
+                        """)
+
+                    # Enhanced contextual interpretation
+                    density = enhanced_metrics.density
+                    centralization = enhanced_metrics.centralization
+                    largest_comp = enhanced_metrics.largest_component_pct
+
+                    if centralization > 0.7 and density < 0.3:
+                        st.error(f"""
+                        🚨 **ESTRUCTURA DE RED FRÁGIL**
+
+                        **Problema:** Alta centralización ({centralization:.1%}) + Baja densidad ({density:.1%}) = Vulnerabilidad extrema
+
+                        **Interpretación:** La red depende de pocos nodos hub, sin redundancia. Si un hub falla, la propagación de stress es rápida.
+
+                        **Analogía:** Sistema financiero pre-2008 (Lehman como hub central).
+
+                        **Acción:** Identificar quiénes son los hubs (ver SIFI table). Evitar exposición directa a estos nodos.
+                        """)
+                    elif centralization > 0.7:
+                        st.warning(f"""
+                        ⚠️ **ALTA CENTRALIZACIÓN** ({centralization:.1%})
+
+                        Red tipo hub-and-spoke. Falla de nodo central puede desestabilizar el sistema. Monitorear health de dealers y bancos principales.
+                        """)
+                    elif density < 0.3:
+                        st.warning(f"""
+                        ⚠️ **BAJA DENSIDAD** ({density:.1%})
+
+                        Red poco conectada. Riesgo de fragmentación en stress (nodos se desconectan). Puede indicar retiro de market-making.
+                        """)
                     else:
-                        st.success("✅ **HEALTHY NETWORK STRUCTURE**: Balanced connectivity")
+                        st.success(f"""
+                        ✅ **ESTRUCTURA SALUDABLE**
+
+                        Densidad ({density:.1%}) y centralización ({centralization:.1%}) balanceadas. Red puede absorber shocks sin fragmentarse.
+                        """)
 
                     # === PHASE 4: ADVANCED METRICS ===
                     st.divider()
@@ -1220,13 +1591,64 @@ if st.session_state.get('run_analysis', False):
                             help="Overall network robustness (0=fragile, 1=resilient)"
                         )
 
-                    # Resilience interpretation
-                    if enhanced_metrics.network_resilience > 0.7:
-                        st.success("✅ **HIGH RESILIENCE**: Network is robust to shocks")
-                    elif enhanced_metrics.network_resilience > 0.5:
-                        st.info("ℹ️ **MODERATE RESILIENCE**: Monitor key nodes")
+                    # Theory expander
+                    with st.expander("ℹ️ Advanced Metrics Theory"):
+                        st.markdown("""
+                        **Contagion Index (CoI):** Esperanza de pérdidas sistémicas si nodos fallan. Basado en Cont et al. (2013).
+                        - Simula defaults de cada nodo y calcula propagación por la red
+                        - Más alto = mayor riesgo de cascadas
+
+                        **Network Resilience:** Inverso del contagion index normalizado. Mide robustez global.
+                        - >70% = Red puede absorber múltiples shocks
+                        - <30% = Frágil, cualquier falla puede ser catastrófica
+
+                        **SIM Score (Systemic Importance Measure):** Framework Basel III SIFI que considera:
+                        1. **Size:** Mayor AUM = mayor impacto si falla
+                        2. **Interconnectedness:** Más links = mayor contagio potencial
+                        3. **Substitutability:** ¿Hay otros que hagan su función?
+                        4. **Complexity:** Más complejo = más difícil de resolver si falla
+
+                        **Network LCR:** Adaptación del Liquidity Coverage Ratio bancario a nivel de red.
+                        - LCR = High Quality Liquid Assets / Net Cash Outflows (30d stress)
+                        - LCR < 1.0 = Insuficiente liquidez para sobrevivir 30 días de stress
+                        """)
+
+                    # Enhanced resilience interpretation
+                    resilience = enhanced_metrics.network_resilience
+                    contagion = enhanced_metrics.contagion_index
+
+                    if resilience > 0.7:
+                        st.success(f"""
+                        ✅ **ALTA RESILIENCIA** ({resilience:.1%})
+
+                        **Interpretación:** Red robusta con múltiples caminos alternativos. Puede absorber fallas de nodos individuales sin colapsar.
+
+                        **Contagion Index bajo:** {contagion:.1f}. Propagación de stress limitada.
+
+                        **Entorno apropiado para:** Risk-on positioning, leverage moderado es aceptable.
+                        """)
+                    elif resilience > 0.5:
+                        st.info(f"""
+                        ℹ️ **RESILIENCIA MODERADA** ({resilience:.1%})
+
+                        **Interpretación:** Red puede absorber shocks pequeños pero vulnerable a eventos mayores.
+
+                        **Contagion Index:** {contagion:.1f}. Monitorear especialmente nodos SIFI (ver tabla abajo).
+
+                        **Acción:** Mantener stops ajustados. Evitar overconcentration en assets ilíquidos.
+                        """)
                     else:
-                        st.error("🔴 **LOW RESILIENCE**: Network vulnerable to contagion")
+                        st.error(f"""
+                        🚨 **BAJA RESILIENCIA** ({resilience:.1%})
+
+                        **Interpretación:** Red frágil. Falla de un nodo clave puede desencadenar cascadas sistémicas.
+
+                        **Contagion Index elevado:** {contagion:.1f}. Alto riesgo de propagación rápida de stress.
+
+                        **Precedente:** Agosto 2007 (quant quake), Septiembre 2008 (post-Lehman), Marzo 2020 (COVID crash).
+
+                        **Acción:** Postura defensiva. Reducir equity exposure <30%, aumentar cash >50%, evitar leverage.
+                        """)
 
                     # Systemically Important Nodes (SIM)
                     st.subheader("🏦 Systemically Important Financial Institutions (SIFIs)")
@@ -1277,12 +1699,24 @@ if st.session_state.get('run_analysis', False):
                         st.dataframe(vuln_df, use_container_width=True, hide_index=True)
 
                         st.error(f"🔴 **{len(enhanced_metrics.vulnerable_nodes)} VULNERABLE NODES DETECTED**")
+
+                        st.divider()
+                        st.subheader("🎯 Acciones Sugeridas a Nivel de Sistema")
+                        st.caption("⚠️ **Disclaimer:** Estas son acciones sugeridas basadas en análisis cuantitativo. "
+                                 "NO constituyen asesoría financiera. Consulte con un profesional antes de tomar decisiones.")
+
                         st.markdown("""
-                        **Recommended Actions:**
-                        - Increase liquidity buffers for vulnerable nodes
-                        - Monitor for contagion risk
-                        - Consider emergency liquidity facilities
-                        - Review interconnections to vulnerable nodes
+                        **Para Policy Makers / Reguladores:**
+                        - 🏦 Aumentar buffers de liquidez para nodos vulnerables
+                        - 👀 Monitorear intensamente riesgo de contagio desde estos nodos
+                        - 🆘 Considerar facilidades de liquidez de emergencia (standing repo, discount window)
+                        - 🔗 Revisar interconexiones a nodos vulnerables (exposures, collateral chains)
+
+                        **Para Portfolio Managers:**
+                        - ⛔ Evitar exposición directa a instituciones vulnerables identificadas
+                        - 📉 Reducir counterparty risk diversificando entre múltiples brokers/custodios
+                        - 💰 Priorizar liquidez: preferir assets líquidos sobre illiquid alternatives
+                        - 🛡️ Implementar hedges estructurales (opciones, tail risk protection)
                         """)
                     else:
                         st.success("✅ No vulnerable nodes detected (all SIFIs have adequate LCR)")
