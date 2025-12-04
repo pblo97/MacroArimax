@@ -2914,7 +2914,7 @@ if st.session_state.get('run_analysis', False):
                 'Signal_Delta': '{:.3f}',
                 'Contribution_Delta': '{:.3f}',
                 'Weight': '{:.1%}'
-            }).background_gradient(subset=['Contribution_Delta'], cmap='RdYlGn_r'),
+            }),
             use_container_width=True
         )
 
