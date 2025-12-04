@@ -2609,38 +2609,405 @@ if st.session_state.get('run_analysis', False):
     # Tab 5: Explicabilidad
     # ==================
     with tab5:
-        st.header("Explicabilidad & Atribución")
+        st.header("🔍 Explicabilidad & Atribución")
 
-        st.markdown("""
-        ### Por qué el sistema está en este estado?
+        # Theory expander
+        with st.expander("📚 ¿Qué es la explicabilidad del Semáforo?", expanded=False):
+            st.markdown("""
+            ### 🎯 Objetivo de la Explicabilidad
 
-        **Factores clave actuales:**
-        1. **Net Liquidity**: {nl_trend}
-        2. **Spreads**: {spread_trend}
-        3. **Régimen HMM**: {regime}
+            La **explicabilidad** (interpretability) descompone el **Stress Score** del Semáforo para entender:
+            1. **¿Qué señales están contribuyendo al score actual?**
+            2. **¿Cuánto contribuye cada señal?** (atribución)
+            3. **¿Cómo ha evolucionado cada contribución en el tiempo?**
+            4. **¿Qué pasaría si una señal cambiara?** (análisis what-if)
 
-        **Drivers principales:**
-        - Cambio en ON RRP: {rrp_change}
-        - Cambio en TGA: {tga_change}
-        - Anomalías detectadas: {anomalies}
-        """.format(
-            nl_trend="Cayendo" if nl_df["delta_net_liquidity"].iloc[-1] < 0 else "Subiendo",
-            spread_trend="Ampliándose" if df.get("sofr_effr_spread", pd.Series([0])).diff().iloc[-1] > 0 else "Estrechándose",
-            regime="Stress" if latest_score > stress_threshold else "Normal",
-            rrp_change=f"${nl_df['delta_rrp'].iloc[-1]:.1f}B",
-            tga_change=f"${nl_df['delta_tga'].iloc[-1]:.1f}B",
-            anomalies=anomaly_flag.tail(5).sum(),
+            ### 🧮 Fórmula del Stress Score
+
+            ```
+            Stress Score = Σ (señal_i × peso_i)
+
+            = 0.30 × DFM_Factor_Z
+            + 0.20 × CUSUM_Alarm
+            + 0.20 × Isolation_Forest_Anomaly
+            + 0.30 × Net_Liquidity_Stress
+            ```
+
+            ### 📊 Tipos de Visualizaciones
+
+            1. **Waterfall Chart**: Muestra cómo cada señal suma/resta del score total
+            2. **Contribution Over Time**: Evolución histórica de contribuciones
+            3. **Correlation Matrix**: Relaciones entre señales (detecta redundancia)
+            4. **Driver Analysis**: Identifica qué señal causó cambios recientes
+
+            ### 📚 Referencias
+
+            - **Lundberg & Lee (2017)**: SHAP (SHapley Additive exPlanations) - framework general
+            - **Ribeiro et al. (2016)**: LIME (Local Interpretable Model-agnostic Explanations)
+            - **Molnar (2020)**: "Interpretable Machine Learning" - libro definitivo
+
+            **Nota:** El Semáforo es inherentemente interpretable (modelo lineal), no requiere SHAP/LIME.
+            """)
+
+        st.markdown("---")
+
+        # === CURRENT STATE SUMMARY ===
+        st.subheader("📊 Estado Actual del Sistema")
+
+        summary_col1, summary_col2, summary_col3 = st.columns(3)
+
+        with summary_col1:
+            nl_trend_value = nl_df["delta_net_liquidity"].iloc[-1]
+            nl_trend = "📉 Cayendo" if nl_trend_value < 0 else "📈 Subiendo"
+            nl_color = "red" if nl_trend_value < -100 else "orange" if nl_trend_value < 0 else "green"
+
+            st.markdown(f"""
+            <div style="padding: 15px; border-radius: 10px; border: 2px solid {nl_color}; background-color: rgba(255,255,255,0.05);">
+                <p style="text-align: center; font-size: 0.9em; color: gray; margin: 0;">Net Liquidity</p>
+                <h3 style="text-align: center; margin: 10px 0;">{nl_trend}</h3>
+                <p style="text-align: center; font-size: 0.8em; margin: 0;">${nl_trend_value:.1f}B change</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with summary_col2:
+            if "sofr_effr_spread" in df.columns:
+                spread_change = df["sofr_effr_spread"].diff().iloc[-1]
+                spread_trend = "📈 Ampliándose" if spread_change > 0 else "📉 Estrechándose"
+                spread_color = "red" if spread_change > 0.05 else "orange" if spread_change > 0 else "green"
+            else:
+                spread_trend = "N/A"
+                spread_color = "gray"
+                spread_change = 0
+
+            st.markdown(f"""
+            <div style="padding: 15px; border-radius: 10px; border: 2px solid {spread_color}; background-color: rgba(255,255,255,0.05);">
+                <p style="text-align: center; font-size: 0.9em; color: gray; margin: 0;">Spreads</p>
+                <h3 style="text-align: center; margin: 10px 0;">{spread_trend}</h3>
+                <p style="text-align: center; font-size: 0.8em; margin: 0;">{spread_change:.3f} bps</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with summary_col3:
+            regime = "🔴 STRESS" if latest_score > stress_threshold else "🟢 NORMAL"
+            regime_color = "red" if latest_score > stress_threshold else "green"
+            anomalies_count = anomaly_flag.tail(5).sum()
+
+            st.markdown(f"""
+            <div style="padding: 15px; border-radius: 10px; border: 2px solid {regime_color}; background-color: rgba(255,255,255,0.05);">
+                <p style="text-align: center; font-size: 0.9em; color: gray; margin: 0;">Régimen Actual</p>
+                <h3 style="text-align: center; margin: 10px 0;">{regime}</h3>
+                <p style="text-align: center; font-size: 0.8em; margin: 0;">{anomalies_count} anomalías (5d)</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # === WATERFALL CHART: Current Contribution Breakdown ===
+        st.subheader("💧 Waterfall de Contribuciones (Hoy)")
+
+        # Calculate contributions for latest date
+        latest_contributions = {}
+        for col in weights.keys():
+            if col in signals.columns and len(signals[col].dropna()) > 0:
+                signal_value = signals[col].iloc[-1]
+                contribution = signal_value * weights[col]
+                latest_contributions[col] = contribution
+
+        # Create waterfall data
+        waterfall_data = []
+        cumulative = 0
+        for signal_name, contribution in sorted(latest_contributions.items(), key=lambda x: x[1], reverse=True):
+            waterfall_data.append({
+                'Signal': signal_name,
+                'Contribution': contribution,
+                'Cumulative': cumulative,
+                'Next_Cumulative': cumulative + contribution
+            })
+            cumulative += contribution
+
+        waterfall_df = pd.DataFrame(waterfall_data)
+
+        # Create waterfall chart using Plotly
+        fig_waterfall = go.Figure()
+
+        # Add bars for each contribution
+        colors = []
+        for contrib in waterfall_df['Contribution']:
+            if contrib > 0:
+                colors.append('rgba(255, 100, 100, 0.7)')  # Red for positive (stress)
+            else:
+                colors.append('rgba(100, 255, 100, 0.7)')  # Green for negative (relief)
+
+        fig_waterfall.add_trace(go.Waterfall(
+            name="Contributions",
+            orientation="v",
+            measure=["relative"] * len(waterfall_df) + ["total"],
+            x=list(waterfall_df['Signal']) + ['Total Score'],
+            textposition="outside",
+            y=list(waterfall_df['Contribution']) + [cumulative],
+            connector={"line": {"color": "rgb(63, 63, 63)"}},
+            increasing={"marker": {"color": "rgba(255, 100, 100, 0.7)"}},
+            decreasing={"marker": {"color": "rgba(100, 255, 100, 0.7)"}},
+            totals={"marker": {"color": "rgba(100, 100, 255, 0.9)"}}
         ))
 
-        # Feature importance (placeholder)
-        st.subheader("Importancia de Features")
+        fig_waterfall.update_layout(
+            title="Contribución de cada señal al Stress Score",
+            yaxis_title="Contribution",
+            xaxis_title="Signals",
+            showlegend=False,
+            height=450
+        )
+
+        st.plotly_chart(fig_waterfall, use_container_width=True)
+
+        st.markdown("---")
+
+        # === FEATURE WEIGHTS BAR CHART ===
+        st.subheader("⚖️ Pesos de Features en el Ensemble")
+
         importance = pd.DataFrame({
             "Feature": list(weights.keys()),
             "Weight": list(weights.values()),
+            "Weight_Pct": [w * 100 for w in weights.values()]
         }).sort_values("Weight", ascending=False)
 
-        fig = px.bar(importance, x="Weight", y="Feature", orientation="h", title="Pesos en Score Final")
-        st.plotly_chart(fig, use_container_width=True)
+        fig_weights = go.Figure()
+
+        fig_weights.add_trace(go.Bar(
+            x=importance['Weight_Pct'],
+            y=importance['Feature'],
+            orientation='h',
+            marker=dict(
+                color=importance['Weight_Pct'],
+                colorscale='Blues',
+                showscale=True,
+                colorbar=dict(title="Weight %")
+            ),
+            text=importance['Weight_Pct'].apply(lambda x: f"{x:.0f}%"),
+            textposition='outside'
+        ))
+
+        fig_weights.update_layout(
+            title="Importancia Relativa de cada Señal en el Semáforo",
+            xaxis_title="Weight (%)",
+            yaxis_title="Signal",
+            height=350
+        )
+
+        st.plotly_chart(fig_weights, use_container_width=True)
+
+        st.markdown("---")
+
+        # === CONTRIBUTION OVER TIME (Stacked Area) ===
+        st.subheader("📈 Evolución de Contribuciones (6 meses)")
+
+        # Compute contributions over time
+        lookback = min(126, len(signals))  # 6 months
+        signals_recent = signals.iloc[-lookback:]
+
+        contrib_history = pd.DataFrame()
+        for col in weights.keys():
+            if col in signals_recent.columns:
+                contrib_history[col] = signals_recent[col] * weights[col]
+
+        # Create stacked area chart
+        fig_contrib = go.Figure()
+
+        for col in contrib_history.columns:
+            fig_contrib.add_trace(go.Scatter(
+                x=contrib_history.index,
+                y=contrib_history[col],
+                mode='lines',
+                name=col,
+                stackgroup='one',
+                fillcolor=None
+            ))
+
+        fig_contrib.update_layout(
+            title="Contribuciones Acumuladas a lo Largo del Tiempo",
+            xaxis_title="Fecha",
+            yaxis_title="Contribution",
+            hovermode='x unified',
+            height=450
+        )
+
+        st.plotly_chart(fig_contrib, use_container_width=True)
+
+        st.markdown("---")
+
+        # === CORRELATION MATRIX ===
+        st.subheader("🔗 Matriz de Correlación entre Señales")
+
+        st.markdown("""
+        **¿Por qué es importante?**
+        - **Alta correlación** (>0.7): Señales redundantes, capturan el mismo fenómeno
+        - **Baja correlación** (<0.3): Señales independientes, capturan aspectos diferentes
+        - **Correlación negativa** (<-0.3): Señales contradictorias (raro pero posible)
+        """)
+
+        # Calculate correlation
+        signals_for_corr = signals[list(weights.keys())].dropna()
+        if len(signals_for_corr) > 10:
+            corr_matrix = signals_for_corr.corr()
+
+            fig_corr = go.Figure(data=go.Heatmap(
+                z=corr_matrix.values,
+                x=corr_matrix.columns,
+                y=corr_matrix.columns,
+                colorscale='RdBu',
+                zmid=0,
+                zmin=-1,
+                zmax=1,
+                text=corr_matrix.values.round(2),
+                texttemplate='%{text}',
+                textfont={"size": 12},
+                colorbar=dict(title="Correlation")
+            ))
+
+            fig_corr.update_layout(
+                title="Correlación de Spearman entre Señales",
+                height=450,
+                xaxis={'side': 'bottom'}
+            )
+
+            st.plotly_chart(fig_corr, use_container_width=True)
+
+            # Interpretation
+            max_corr = corr_matrix.abs().where(~np.eye(len(corr_matrix), dtype=bool)).max().max()
+            if max_corr > 0.7:
+                st.warning(f"⚠️ Correlación máxima detectada: {max_corr:.2f}. Algunas señales pueden ser redundantes.")
+            else:
+                st.success(f"✅ Correlación máxima: {max_corr:.2f}. Las señales son relativamente independientes.")
+        else:
+            st.info("No hay suficientes datos para calcular correlaciones")
+
+        st.markdown("---")
+
+        # === DRIVER ANALYSIS: What caused recent changes? ===
+        st.subheader("🔍 Análisis de Drivers: ¿Qué causó cambios recientes?")
+
+        st.markdown("""
+        **Pregunta:** ¿Qué señal fue responsable del cambio en el Stress Score en los últimos 5 días?
+        """)
+
+        # Calculate deltas for last 5 days
+        lookback_driver = min(5, len(signals))
+        driver_analysis = []
+
+        for col in weights.keys():
+            if col in signals.columns and len(signals[col].dropna()) >= lookback_driver:
+                signal_delta = signals[col].iloc[-1] - signals[col].iloc[-lookback_driver]
+                contrib_delta = signal_delta * weights[col]
+                driver_analysis.append({
+                    'Signal': col,
+                    'Signal_Delta': signal_delta,
+                    'Contribution_Delta': contrib_delta,
+                    'Weight': weights[col]
+                })
+
+        driver_df = pd.DataFrame(driver_analysis).sort_values('Contribution_Delta', key=abs, ascending=False)
+
+        # Show table
+        st.dataframe(
+            driver_df.style.format({
+                'Signal_Delta': '{:.3f}',
+                'Contribution_Delta': '{:.3f}',
+                'Weight': '{:.1%}'
+            }).background_gradient(subset=['Contribution_Delta'], cmap='RdYlGn_r'),
+            use_container_width=True
+        )
+
+        # Highlight main driver
+        if len(driver_df) > 0:
+            main_driver = driver_df.iloc[0]
+            direction = "aumentó" if main_driver['Contribution_Delta'] > 0 else "disminuyó"
+
+            st.info(f"""
+            🎯 **Driver principal:** {main_driver['Signal']}
+            - Cambió en {main_driver['Signal_Delta']:.3f}
+            - Contribución al Stress Score {direction} en {abs(main_driver['Contribution_Delta']):.3f}
+            """)
+
+        st.markdown("---")
+
+        # === WHAT-IF ANALYSIS ===
+        st.subheader("🔮 Análisis What-If: ¿Y si una señal cambiara?")
+
+        st.markdown("""
+        **Simulación:** Calcula cómo cambiaría el Stress Score si modificas una señal.
+        """)
+
+        # Select signal to modify
+        whatif_col1, whatif_col2 = st.columns([1, 2])
+
+        with whatif_col1:
+            signal_to_modify = st.selectbox(
+                "Señal a modificar:",
+                options=list(weights.keys()),
+                help="Selecciona qué señal quieres cambiar"
+            )
+
+            current_value = signals[signal_to_modify].iloc[-1] if signal_to_modify in signals.columns else 0
+
+            new_value = st.slider(
+                f"Nuevo valor de {signal_to_modify}:",
+                min_value=float(max(-3.0, current_value - 2)),
+                max_value=float(min(3.0, current_value + 2)),
+                value=float(current_value),
+                step=0.1,
+                help="Ajusta el valor de la señal"
+            )
+
+        with whatif_col2:
+            # Calculate new score
+            delta_signal = new_value - current_value
+            delta_contribution = delta_signal * weights[signal_to_modify]
+            new_score = latest_score + delta_contribution
+
+            new_regime = "🔴 STRESS" if new_score > stress_threshold else "🟢 NORMAL"
+            score_change = "subió" if delta_contribution > 0 else "bajó"
+
+            st.markdown(f"""
+            ### Resultado de la simulación:
+
+            **Cambios:**
+            - Señal {signal_to_modify}: {current_value:.3f} → {new_value:.3f} (Δ = {delta_signal:.3f})
+            - Contribución: {delta_contribution:+.3f}
+
+            **Impacto en Stress Score:**
+            - Score original: {latest_score:.3f}
+            - Score nuevo: {new_score:.3f}
+            - Cambio: {delta_contribution:+.3f} ({abs(delta_contribution/latest_score)*100:.1f}%)
+
+            **Nuevo régimen:** {new_regime}
+            """)
+
+            # Visual comparison
+            fig_whatif = go.Figure()
+
+            fig_whatif.add_trace(go.Bar(
+                x=['Score Actual', 'Score Simulado'],
+                y=[latest_score, new_score],
+                marker=dict(color=['blue', 'orange']),
+                text=[f"{latest_score:.3f}", f"{new_score:.3f}"],
+                textposition='outside'
+            ))
+
+            fig_whatif.add_hline(
+                y=stress_threshold,
+                line_dash="dash",
+                line_color="red",
+                annotation_text=f"Threshold ({stress_threshold:.2f})"
+            )
+
+            fig_whatif.update_layout(
+                title="Comparación: Score Actual vs Simulado",
+                yaxis_title="Stress Score",
+                height=350
+            )
+
+            st.plotly_chart(fig_whatif, use_container_width=True)
 
     # ==================
     # Tab 6: Crisis Predictor - ML Approach
@@ -3827,11 +4194,29 @@ if st.session_state.get('run_analysis', False):
             try:
                 if 'NFCI' in df.columns and 'cp_tbill_spread' in df.columns and 'T10Y2Y' in df.columns:
                     from macro_plumbing.models.crisis_classifier import CrisisPredictor
-                    predictor = CrisisPredictor()
+                    import pickle
+                    from pathlib import Path
+
+                    model_path = Path("macro_plumbing/models/trained_crisis_predictor.pkl")
+
+                    # Try to load pre-trained model, otherwise train a new one
+                    if model_path.exists():
+                        with open(model_path, 'rb') as f:
+                            predictor = pickle.load(f)
+                    else:
+                        # Train model if it doesn't exist
+                        predictor = CrisisPredictor(horizon=5)
+                        train_end = df.index[-252] if len(df) > 252 else df.index[-50]
+                        df_train = df.loc[:train_end].copy()
+                        predictor.train(df_train)
+                        # Save for future use
+                        model_path.parent.mkdir(exist_ok=True)
+                        with open(model_path, 'wb') as f:
+                            pickle.dump(predictor, f)
+
                     df_recent = df.dropna(subset=['NFCI', 'cp_tbill_spread', 'T10Y2Y']).tail(30)
                     if len(df_recent) > 0:
-                        X_recent = df_recent[['cp_tbill_spread', 'T10Y2Y', 'NFCI']]
-                        probas = predictor.predict_proba(X_recent)[:, 1]
+                        probas = predictor.predict_proba(df_recent)
                         crisis_proba = probas[-1]
                         has_crisis_predictor = True
             except Exception as e:
