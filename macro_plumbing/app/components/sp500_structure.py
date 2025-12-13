@@ -603,22 +603,22 @@ def detect_liquidity_zones(df: pd.DataFrame, price_col: str = 'SP500') -> Dict:
 
     liquidity_zones = []
 
-    # Above current price: long stop losses likely above swing highs
+    # Above current price: short stop losses (shorts get stopped out when price rallies)
     above_levels = [h for h in high_levels if h > current_price]
     for level in above_levels[:5]:
         liquidity_zones.append({
             'price': level,
-            'type': 'Long Stops',
+            'type': 'Short Stops',
             'description': f'Stop cluster above {level:.2f}',
             'direction': 'above'
         })
 
-    # Below current price: short stop losses likely below swing lows
+    # Below current price: long stop losses (longs get stopped out when price falls)
     below_levels = [l for l in low_levels if l < current_price]
     for level in sorted(below_levels, reverse=True)[:5]:
         liquidity_zones.append({
             'price': level,
-            'type': 'Short Stops',
+            'type': 'Long Stops',
             'description': f'Stop cluster below {level:.2f}',
             'direction': 'below'
         })
@@ -1105,8 +1105,8 @@ def render_sp500_structure(df: pd.DataFrame):
 
     # Check if SP500 data exists
     if 'SP500' not in df.columns:
-        st.error("S&P 500 data not available in dataset")
-        st.info("This analysis requires SP500 series from FRED")
+        st.error("⚠️ S&P 500 data not available in dataset")
+        st.info("💡 This analysis requires SP500 series from FRED. Please check your data source.")
         return
 
     # Calculate all metrics
@@ -1153,8 +1153,67 @@ def render_sp500_structure(df: pd.DataFrame):
         - **Liquidity Zones**: Stop loss clusters
         """)
 
+    # ====================================
+    # HERO SUMMARY CARD - Quick Overview
+    # ====================================
+    current_price = df['SP500'].iloc[-1] if len(df) > 0 else 0
+    trend_emoji = "📈" if "Bullish" in structure['trend'] else "📉" if "Bearish" in structure['trend'] else "➡️"
+
+    # Determine overall market state color
+    if "Bullish" in structure['trend'] and trend_strength.get('strength', 0) > 60:
+        state_color = "green"
+        state_emoji = "🟢"
+        state_text = "FAVORABLE"
+    elif "Bearish" in structure['trend'] and trend_strength.get('strength', 0) > 60:
+        state_color = "red"
+        state_emoji = "🔴"
+        state_text = "ADVERSO"
+    elif trend_strength.get('strength', 0) < 40:
+        state_color = "gray"
+        state_emoji = "⚪"
+        state_text = "INDECISO"
+    else:
+        state_color = "orange"
+        state_emoji = "🟡"
+        state_text = "MIXTO"
+
+    st.markdown(f"""
+    <div style="padding: 20px; border-radius: 15px; border: 3px solid {state_color}; background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 100%); margin-bottom: 20px;">
+        <h2 style="text-align: center; margin: 0;">{state_emoji} Estado del Mercado: {state_text}</h2>
+        <div style="display: flex; justify-content: space-around; margin-top: 15px; flex-wrap: wrap;">
+            <div style="text-align: center; margin: 10px;">
+                <p style="font-size: 0.9em; color: gray; margin: 5px;">Precio Actual</p>
+                <h3 style="margin: 5px;">${current_price:.2f}</h3>
+            </div>
+            <div style="text-align: center; margin: 10px;">
+                <p style="font-size: 0.9em; color: gray; margin: 5px;">Tendencia</p>
+                <h3 style="margin: 5px;">{trend_emoji} {structure['trend'].split('(')[0].strip()}</h3>
+            </div>
+            <div style="text-align: center; margin: 10px;">
+                <p style="font-size: 0.9em; color: gray; margin: 5px;">Fuerza</p>
+                <h3 style="margin: 5px;">{trend_strength.get('strength', 0):.0f}/100</h3>
+            </div>
+            <div style="text-align: center; margin: 10px;">
+                <p style="font-size: 0.9em; color: gray; margin: 5px;">Estructura</p>
+                <h3 style="margin: 5px;">{structure['structure']}</h3>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Quick Trading Insight
+    if bos['bos_detected']:
+        if bos['bos_type'] == 'Bullish':
+            st.success(f"🚀 **Break of Structure Alcista** detectado en {bos.get('level', 0):.2f} - Posible continuación al alza")
+        else:
+            st.error(f"⚠️ **Break of Structure Bajista** detectado en {bos.get('level', 0):.2f} - Precaución con posiciones largas")
+    elif choch['choch_detected'] and choch['warning_level'] == 'High':
+        st.warning(f"⚠️ **Advertencia CHoCH:** {choch['description']} - Posible cambio de régimen próximo")
+
+    st.markdown("---")
+
     # Section 1: Current Market Structure & Macro Context
-    st.subheader("🔍 Current Market Structure")
+    st.subheader("🔍 Estructura de Mercado Detallada")
 
     col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -1329,31 +1388,30 @@ def render_sp500_structure(df: pd.DataFrame):
         else:
             st.caption("No support levels identified")
 
-    # Section 5: Fibonacci Levels
+    # Section 5: Fibonacci Levels (Collapsible)
     if fib_levels.get('retracements'):
         st.markdown("---")
-        st.subheader("📐 Fibonacci Levels")
+        with st.expander("📐 Fibonacci Levels (Avanzado)", expanded=False):
+            current_price = levels.get('current_price', 0)
 
-        current_price = levels.get('current_price', 0)
+            st.caption(f"Based on: High {fib_levels['swing_high']:.2f} → Low {fib_levels['swing_low']:.2f}")
 
-        st.caption(f"Based on: High {fib_levels['swing_high']:.2f} → Low {fib_levels['swing_low']:.2f}")
+            col_fib1, col_fib2 = st.columns(2)
 
-        col_fib1, col_fib2 = st.columns(2)
+            with col_fib1:
+                st.markdown("**Retracements (Support if pullback)**")
+                for fib in fib_levels['retracements'][1:5]:  # Show 0.236, 0.382, 0.5, 0.618
+                    price = fib['price']
+                    # Mark if price is near this level
+                    if abs(price - current_price) / current_price < 0.01:  # Within 1%
+                        st.caption(f"→ {fib['label']}: **{price:.2f}** ← CURRENT AREA")
+                    else:
+                        st.caption(f"{fib['label']}: {price:.2f}")
 
-        with col_fib1:
-            st.markdown("**Retracements (Support if pullback)**")
-            for fib in fib_levels['retracements'][1:5]:  # Show 0.236, 0.382, 0.5, 0.618
-                price = fib['price']
-                # Mark if price is near this level
-                if abs(price - current_price) / current_price < 0.01:  # Within 1%
-                    st.caption(f"→ {fib['label']}: **{price:.2f}** ← CURRENT AREA")
-                else:
-                    st.caption(f"{fib['label']}: {price:.2f}")
-
-        with col_fib2:
-            st.markdown("**Extensions (Upside targets)**")
-            for fib in fib_levels['extensions'][:3]:  # Show 1.272, 1.414, 1.618
-                st.caption(f"{fib['label']}: {fib['price']:.2f}")
+            with col_fib2:
+                st.markdown("**Extensions (Upside targets)**")
+                for fib in fib_levels['extensions'][:3]:  # Show 1.272, 1.414, 1.618
+                    st.caption(f"{fib['label']}: {fib['price']:.2f}")
 
     # Section 6: Liquidity Zones
     if liq_zones.get('zones'):
@@ -1366,12 +1424,14 @@ def render_sp500_structure(df: pd.DataFrame):
         below_zones = [z for z in liq_zones['zones'] if z['direction'] == 'below'][:3]
 
         with col_liq1:
-            st.markdown("**Above (Long Stops)**")
+            st.markdown("**Above (Short Stops)**")
+            st.caption("_Shorts forced to cover when price rallies_")
             for zone in above_zones:
                 st.caption(f"• {zone['price']:.2f} - {zone['type']}")
 
         with col_liq2:
-            st.markdown("**Below (Short Stops)**")
+            st.markdown("**Below (Long Stops)**")
+            st.caption("_Longs forced to sell when price drops_")
             for zone in below_zones:
                 st.caption(f"• {zone['price']:.2f} - {zone['type']}")
 
@@ -1398,25 +1458,24 @@ def render_sp500_structure(df: pd.DataFrame):
             st.metric("Avg Daily Move", f"{hist_stats['avg_daily_move']:.2f}%")
             st.caption(f"Max: {hist_stats['max_daily_gain']:.2f}%")
 
-    # Section 8: Performance Metrics
+    # Section 8: Performance Metrics (Collapsible)
     if performance and performance.get('bos_count', 0) > 0:
         st.markdown("---")
-        st.subheader("📊 BOS Detection Performance (Last 12 Months)")
+        with st.expander("📊 BOS Detection Performance (Last 12 Months)", expanded=False):
+            col_perf1, col_perf2, col_perf3, col_perf4 = st.columns(4)
 
-        col_perf1, col_perf2, col_perf3, col_perf4 = st.columns(4)
+            with col_perf1:
+                st.metric("BOS Detected", f"{performance['bos_count']}")
 
-        with col_perf1:
-            st.metric("BOS Detected", f"{performance['bos_count']}")
+            with col_perf2:
+                st.metric("Success Rate", f"{performance['success_rate']:.0f}%")
+                st.caption("≥1% move after BOS")
 
-        with col_perf2:
-            st.metric("Success Rate", f"{performance['success_rate']:.0f}%")
-            st.caption("≥1% move after BOS")
+            with col_perf3:
+                st.metric("Avg Move Post-BOS", f"{performance['avg_move_after_bos']:.2f}%")
 
-        with col_perf3:
-            st.metric("Avg Move Post-BOS", f"{performance['avg_move_after_bos']:.2f}%")
-
-        with col_perf4:
-            st.metric("Avg Days to Reversal", f"{performance['avg_days_to_reversal']:.0f}")
+            with col_perf4:
+                st.metric("Avg Days to Reversal", f"{performance['avg_days_to_reversal']:.0f}")
 
     # Section 9: Price Chart with Structure
     st.markdown("---")
@@ -1462,39 +1521,38 @@ def render_sp500_structure(df: pd.DataFrame):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # Section 10: Swing Points Detail
+    # Section 10: Swing Points Detail (Collapsible)
     st.markdown("---")
-    st.subheader("🎯 Recent Swing Points")
+    with st.expander("🎯 Detalle de Puntos de Swing (Avanzado)", expanded=False):
+        if structure['last_swing_high'] is not None:
+            col_swing1, col_swing2 = st.columns(2)
 
-    if structure['last_swing_high'] is not None:
-        col_swing1, col_swing2 = st.columns(2)
+            with col_swing1:
+                st.markdown("**Last Swing High**")
+                st.write(f"Price: **{structure['last_swing_high']:.2f}**")
+                if 'last_high_date' in structure:
+                    st.write(f"Date: {structure['last_high_date'].strftime('%Y-%m-%d')}")
 
-        with col_swing1:
-            st.markdown("**Last Swing High**")
-            st.write(f"Price: **{structure['last_swing_high']:.2f}**")
-            if 'last_high_date' in structure:
-                st.write(f"Date: {structure['last_high_date'].strftime('%Y-%m-%d')}")
+                st.markdown("**Previous Swing High**")
+                st.write(f"Price: **{structure['prev_swing_high']:.2f}**")
 
-            st.markdown("**Previous Swing High**")
-            st.write(f"Price: **{structure['prev_swing_high']:.2f}**")
+                if structure.get('higher_highs'):
+                    st.success("✅ Higher High (bullish)")
+                else:
+                    st.warning("⚠️ Lower High (bearish)")
 
-            if structure.get('higher_highs'):
-                st.success("✅ Higher High (bullish)")
-            else:
-                st.warning("⚠️ Lower High (bearish)")
+            with col_swing2:
+                st.markdown("**Last Swing Low**")
+                st.write(f"Price: **{structure['last_swing_low']:.2f}**")
+                if 'last_low_date' in structure:
+                    st.write(f"Date: {structure['last_low_date'].strftime('%Y-%m-%d')}")
 
-        with col_swing2:
-            st.markdown("**Last Swing Low**")
-            st.write(f"Price: **{structure['last_swing_low']:.2f}**")
-            if 'last_low_date' in structure:
-                st.write(f"Date: {structure['last_low_date'].strftime('%Y-%m-%d')}")
+                st.markdown("**Previous Swing Low**")
+                st.write(f"Price: **{structure['prev_swing_low']:.2f}**")
 
-            st.markdown("**Previous Swing Low**")
-            st.write(f"Price: **{structure['prev_swing_low']:.2f}**")
-
-            if structure.get('higher_lows'):
-                st.success("✅ Higher Low (bullish)")
-            else:
-                st.warning("⚠️ Lower Low (bearish)")
-    else:
-        st.info("Insufficient data to identify swing points")
+                if structure.get('higher_lows'):
+                    st.success("✅ Higher Low (bullish)")
+                else:
+                    st.warning("⚠️ Lower Low (bearish)")
+        else:
+            st.info("Insufficient data to identify swing points")
