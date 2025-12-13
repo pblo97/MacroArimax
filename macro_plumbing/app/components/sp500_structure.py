@@ -1268,33 +1268,100 @@ def render_sp500_structure(df: pd.DataFrame):
                 help="No early warning"
             )
 
-    # Macro Context Bar
+    # Macro Context Bar - Enhanced with Gauges
     if not np.isnan(macro_ctx.get('crisis_score', np.nan)):
         st.markdown("---")
-        st.markdown("**📊 Macro Context Overlay**")
-        col_macro1, col_macro2, col_macro3, col_macro4 = st.columns(4)
+        st.subheader("📊 Contexto Macro")
 
-        with col_macro1:
+        # Create gauges for VIX and Crisis Score
+        col_gauge1, col_gauge2, col_gauge3 = st.columns(3)
+
+        with col_gauge1:
             crisis_score = macro_ctx.get('crisis_score', 0)
-            st.metric(
-                "Crisis Score",
-                f"{crisis_score:.0f}/4",
-                help="From Macro Dashboard"
-            )
 
-        with col_macro2:
+            # Crisis Score Gauge
+            fig_crisis = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=crisis_score,
+                domain={'x': [0, 1], 'y': [0, 1]},
+                title={'text': "Crisis Score", 'font': {'size': 16}},
+                gauge={
+                    'axis': {'range': [0, 4], 'tickwidth': 1},
+                    'bar': {'color': "darkred" if crisis_score >= 3 else "orange" if crisis_score >= 2 else "green"},
+                    'steps': [
+                        {'range': [0, 1], 'color': 'lightgreen'},
+                        {'range': [1, 2], 'color': 'lightyellow'},
+                        {'range': [2, 3], 'color': 'orange'},
+                        {'range': [3, 4], 'color': 'lightcoral'}
+                    ],
+                    'threshold': {
+                        'line': {'color': "red", 'width': 4},
+                        'thickness': 0.75,
+                        'value': 3
+                    }
+                }
+            ))
+            fig_crisis.update_layout(height=250, margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig_crisis, use_container_width=True)
+
+        with col_gauge2:
             vix = macro_ctx.get('vix', np.nan)
             if not np.isnan(vix):
-                st.metric("VIX", f"{vix:.1f}", help=macro_ctx.get('volatility_regime', 'Unknown'))
+                # VIX Gauge
+                fig_vix = go.Figure(go.Indicator(
+                    mode="gauge+number+delta",
+                    value=vix,
+                    domain={'x': [0, 1], 'y': [0, 1]},
+                    title={'text': "VIX (Volatility)", 'font': {'size': 16}},
+                    delta={'reference': 20, 'increasing': {'color': "red"}},
+                    gauge={
+                        'axis': {'range': [0, 50], 'tickwidth': 1},
+                        'bar': {'color': "darkred" if vix >= 30 else "orange" if vix >= 20 else "green"},
+                        'steps': [
+                            {'range': [0, 15], 'color': 'lightgreen'},
+                            {'range': [15, 20], 'color': 'lightyellow'},
+                            {'range': [20, 30], 'color': 'orange'},
+                            {'range': [30, 50], 'color': 'lightcoral'}
+                        ],
+                        'threshold': {
+                            'line': {'color': "red", 'width': 4},
+                            'thickness': 0.75,
+                            'value': 30
+                        }
+                    }
+                ))
+                fig_vix.update_layout(height=250, margin=dict(l=20, r=20, t=40, b=20))
+                st.plotly_chart(fig_vix, use_container_width=True)
+                st.caption(f"**Régimen:** {macro_ctx.get('volatility_regime', 'Unknown')}")
 
-        with col_macro3:
+        with col_gauge3:
             liq_score = macro_ctx.get('liquidity_score', np.nan)
             if not np.isnan(liq_score):
-                st.metric("Liquidity", f"{liq_score:.1f}", help=macro_ctx.get('liquidity_regime', 'Unknown'))
-
-        with col_macro4:
-            st.caption(f"**Regime:** {macro_ctx.get('volatility_regime', 'Unknown')}")
-            st.caption(f"**Liquidity:** {macro_ctx.get('liquidity_regime', 'Unknown')}")
+                # Liquidity Gauge (inverted - higher = worse)
+                fig_liq = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=liq_score,
+                    domain={'x': [0, 1], 'y': [0, 1]},
+                    title={'text': "Liquidity Stress", 'font': {'size': 16}},
+                    gauge={
+                        'axis': {'range': [0, 1.5], 'tickwidth': 1},
+                        'bar': {'color': "darkred" if liq_score >= 1.0 else "orange" if liq_score >= 0.7 else "green"},
+                        'steps': [
+                            {'range': [0, 0.3], 'color': 'lightgreen'},
+                            {'range': [0.3, 0.5], 'color': 'lightyellow'},
+                            {'range': [0.5, 0.7], 'color': 'orange'},
+                            {'range': [0.7, 1.5], 'color': 'lightcoral'}
+                        ],
+                        'threshold': {
+                            'line': {'color': "red", 'width': 4},
+                            'thickness': 0.75,
+                            'value': 1.0
+                        }
+                    }
+                ))
+                fig_liq.update_layout(height=250, margin=dict(l=20, r=20, t=40, b=20))
+                st.plotly_chart(fig_liq, use_container_width=True)
+                st.caption(f"**Liquidez:** {macro_ctx.get('liquidity_regime', 'Unknown')}")
 
     # Proximity Alerts
     if proximity.get('has_alerts'):
@@ -1302,91 +1369,233 @@ def render_sp500_structure(df: pd.DataFrame):
         for alert in proximity['alerts'][:3]:
             st.caption(f"• {alert['level']} ({alert['price']:.2f}) - {alert['distance_pct']:.2f}% away [{alert['urgency']}]")
 
-    # Section 2: Multi-Timeframe Analysis
+    # Section 2: Multi-Timeframe Analysis - Enhanced with Visual Alignment
     st.markdown("---")
-    st.subheader("🔄 Multi-Timeframe Confirmation")
+    st.subheader("🔄 Confirmación Multi-Timeframe")
 
+    # Visual alignment indicator
+    daily_value = 1 if "Bullish" in mtf_analysis['daily']['trend'] else -1 if "Bearish" in mtf_analysis['daily']['trend'] else 0
+    weekly_value = 1 if "Bullish" in mtf_analysis['weekly']['trend'] else -1 if "Bearish" in mtf_analysis['weekly']['trend'] else 0
+    monthly_value = 1 if "Bullish" in mtf_analysis['monthly']['trend'] else -1 if "Bearish" in mtf_analysis['monthly']['trend'] else 0
+
+    # Create horizontal bar chart showing alignment
+    fig_mtf = go.Figure()
+
+    fig_mtf.add_trace(go.Bar(
+        y=['Daily', 'Weekly', 'Monthly'],
+        x=[daily_value, weekly_value, monthly_value],
+        orientation='h',
+        marker=dict(
+            color=['green' if v > 0 else 'red' if v < 0 else 'gray' for v in [daily_value, weekly_value, monthly_value]],
+            line=dict(color='white', width=2)
+        ),
+        text=['📈 Alcista' if v > 0 else '📉 Bajista' if v < 0 else '➡️ Neutral' for v in [daily_value, weekly_value, monthly_value]],
+        textposition='auto',
+        hovertemplate='%{y}: %{text}<extra></extra>'
+    ))
+
+    fig_mtf.update_layout(
+        title="Alineación de Timeframes",
+        xaxis=dict(
+            title="",
+            range=[-1.5, 1.5],
+            tickvals=[-1, 0, 1],
+            ticktext=['Bajista', 'Neutral', 'Alcista'],
+            zeroline=True,
+            zerolinewidth=2,
+            zerolinecolor='gray'
+        ),
+        yaxis_title="",
+        height=250,
+        showlegend=False,
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
+
+    st.plotly_chart(fig_mtf, use_container_width=True)
+
+    # Details in columns
     col_mtf1, col_mtf2, col_mtf3, col_mtf4 = st.columns(4)
 
     with col_mtf1:
         daily_emoji = "📈" if "Bullish" in mtf_analysis['daily']['trend'] else "📉" if "Bearish" in mtf_analysis['daily']['trend'] else "➡️"
+        trend_color = "green" if daily_value > 0 else "red" if daily_value < 0 else "gray"
         st.markdown(f"**{daily_emoji} Daily**")
-        st.caption(mtf_analysis['daily']['trend'])
+        st.markdown(f"<p style='color: {trend_color};'>{mtf_analysis['daily']['trend']}</p>", unsafe_allow_html=True)
         st.caption(f"*{mtf_analysis['daily']['structure']}*")
 
     with col_mtf2:
         weekly_emoji = "📈" if "Bullish" in mtf_analysis['weekly']['trend'] else "📉" if "Bearish" in mtf_analysis['weekly']['trend'] else "➡️"
+        trend_color = "green" if weekly_value > 0 else "red" if weekly_value < 0 else "gray"
         st.markdown(f"**{weekly_emoji} Weekly**")
-        st.caption(mtf_analysis['weekly']['trend'])
+        st.markdown(f"<p style='color: {trend_color};'>{mtf_analysis['weekly']['trend']}</p>", unsafe_allow_html=True)
         st.caption(f"*{mtf_analysis['weekly']['structure']}*")
 
     with col_mtf3:
         monthly_emoji = "📈" if "Bullish" in mtf_analysis['monthly']['trend'] else "📉" if "Bearish" in mtf_analysis['monthly']['trend'] else "➡️"
+        trend_color = "green" if monthly_value > 0 else "red" if monthly_value < 0 else "gray"
         st.markdown(f"**{monthly_emoji} Monthly**")
-        st.caption(mtf_analysis['monthly']['trend'])
+        st.markdown(f"<p style='color: {trend_color};'>{mtf_analysis['monthly']['trend']}</p>", unsafe_allow_html=True)
         st.caption(f"*{mtf_analysis['monthly']['structure']}*")
 
     with col_mtf4:
-        st.markdown("**Confluence**")
+        st.markdown("**Confluencia**")
         st.caption(mtf_analysis['alignment'])
         if mtf_analysis.get('bullish_count', 0) >= 2:
-            st.success("✅ Strong bullish alignment")
+            st.success("✅ Alineación alcista fuerte")
         elif mtf_analysis.get('bearish_count', 0) >= 2:
-            st.error("⚠️ Strong bearish alignment")
+            st.error("⚠️ Alineación bajista fuerte")
+        else:
+            st.warning("⚠️ Sin alineación clara")
 
-    # Section 3: Risk/Reward Analysis
+    # Section 3: Risk/Reward Analysis - Enhanced with Visual Chart
     st.markdown("---")
-    st.subheader("💰 Risk/Reward Analysis")
+    st.subheader("💰 Análisis Risk/Reward")
 
     if rr_analysis:
-        st.markdown(f"**Suggested Stop Loss:** {rr_analysis[0]['stop_loss']:.2f} (based on nearest support)")
+        st.markdown(f"**Stop Loss Sugerido:** {rr_analysis[0]['stop_loss']:.2f} (basado en soporte más cercano)")
 
+        # Create R:R ratio bar chart
+        targets = [rr['target_level'] for rr in rr_analysis[:3]]
+        rr_ratios = [rr['rr_ratio'] for rr in rr_analysis[:3]]
+        colors = ['green' if r >= 2 else 'orange' if r >= 1 else 'red' for r in rr_ratios]
+
+        fig_rr = go.Figure()
+
+        fig_rr.add_trace(go.Bar(
+            x=targets,
+            y=rr_ratios,
+            marker=dict(color=colors, line=dict(color='white', width=2)),
+            text=[f"{r:.2f}:1" for r in rr_ratios],
+            textposition='outside',
+            hovertemplate='%{x}: R:R = %{y:.2f}:1<extra></extra>'
+        ))
+
+        # Add threshold lines
+        fig_rr.add_hline(y=2, line_dash="dash", line_color="green",
+                        annotation_text="Óptimo (2:1)", annotation_position="right")
+        fig_rr.add_hline(y=1, line_dash="dash", line_color="orange",
+                        annotation_text="Mínimo Aceptable (1:1)", annotation_position="right")
+
+        fig_rr.update_layout(
+            title="Risk/Reward Ratios por Target",
+            xaxis_title="Target Level",
+            yaxis_title="R:R Ratio",
+            yaxis=dict(range=[0, max(rr_ratios) * 1.2]),
+            height=350,
+            showlegend=False
+        )
+
+        st.plotly_chart(fig_rr, use_container_width=True)
+
+        # Details table
+        st.markdown("**Detalle de Targets:**")
         for rr in rr_analysis[:3]:
             col_rr1, col_rr2, col_rr3, col_rr4 = st.columns([1, 1, 1, 1])
 
             with col_rr1:
-                st.write(f"**Target {rr['target_level']}:**")
+                st.write(f"**{rr['target_level']}:**")
 
             with col_rr2:
-                st.write(f"{rr['target_price']:.2f} (+{rr['reward_pct']:.2f}%)")
+                st.write(f"${rr['target_price']:.2f}")
+                st.caption(f"(+{rr['reward_pct']:.2f}%)")
 
             with col_rr3:
-                st.write(f"Risk: -{rr['risk_pct']:.2f}%")
+                st.write(f"Riesgo: -{rr['risk_pct']:.2f}%")
 
             with col_rr4:
                 rr_ratio = rr['rr_ratio']
                 if rr_ratio >= 2:
-                    st.success(f"R:R = {rr_ratio:.2f}:1 ✅")
+                    st.success(f"✅ {rr_ratio:.2f}:1")
                 elif rr_ratio >= 1:
-                    st.warning(f"R:R = {rr_ratio:.2f}:1 ⚠️")
+                    st.warning(f"⚠️ {rr_ratio:.2f}:1")
                 else:
-                    st.error(f"R:R = {rr_ratio:.2f}:1 ❌")
+                    st.error(f"❌ {rr_ratio:.2f}:1")
     else:
-        st.caption("Insufficient support levels for R:R calculation")
+        st.caption("⚠️ Niveles de soporte insuficientes para calcular R:R")
 
-    # Section 4: Support & Resistance Levels
+    # Section 4: Support & Resistance Levels - Enhanced with Visual Distance
     st.markdown("---")
-    st.subheader("📊 Key Support & Resistance Levels")
+    st.subheader("📊 Niveles Clave de Soporte y Resistencia")
 
+    if levels['resistance'] or levels['support']:
+        # Create visual distance chart
+        current_price = levels.get('current_price', 0)
+
+        # Prepare data for chart
+        level_names = []
+        level_prices = []
+        level_distances = []
+        level_colors = []
+
+        # Add resistance levels
+        for i, level in enumerate(levels['resistance'][:3], 1):
+            level_names.append(f"R{i}")
+            level_prices.append(level)
+            distance = ((level - current_price) / current_price) * 100
+            level_distances.append(distance)
+            level_colors.append('red')
+
+        # Add current price
+        level_names.append("Current")
+        level_prices.append(current_price)
+        level_distances.append(0)
+        level_colors.append('blue')
+
+        # Add support levels
+        for i, level in enumerate(levels['support'][:3], 1):
+            level_names.append(f"S{i}")
+            level_prices.append(level)
+            distance = ((level - current_price) / current_price) * 100
+            level_distances.append(distance)
+            level_colors.append('green')
+
+        # Create horizontal bar chart
+        fig_levels = go.Figure()
+
+        fig_levels.add_trace(go.Bar(
+            y=level_names,
+            x=level_distances,
+            orientation='h',
+            marker=dict(color=level_colors, line=dict(color='white', width=1)),
+            text=[f"{d:+.2f}%" for d in level_distances],
+            textposition='auto',
+            hovertemplate='%{y}: $%{customdata:.2f} (%{x:+.2f}%)<extra></extra>',
+            customdata=level_prices
+        ))
+
+        fig_levels.update_layout(
+            title="Distancia desde Precio Actual",
+            xaxis_title="Distancia (%)",
+            yaxis_title="",
+            height=300,
+            showlegend=False,
+            xaxis=dict(zeroline=True, zerolinewidth=3, zerolinecolor='blue')
+        )
+
+        st.plotly_chart(fig_levels, use_container_width=True)
+
+    # Details in columns
     col_levels1, col_levels2 = st.columns(2)
 
     with col_levels1:
-        st.markdown("**Resistance (Above)**")
+        st.markdown("**🔴 Resistencia (Arriba)**")
         if levels['resistance']:
             for i, level in enumerate(levels['resistance'], 1):
                 distance = ((level - levels['current_price']) / levels['current_price']) * 100
-                st.write(f"R{i}: **{level:.2f}** (+{distance:.2f}%)")
+                proximity = "🔥 MUY CERCA" if distance < 0.5 else "⚠️ CERCA" if distance < 1.0 else ""
+                st.write(f"R{i}: **${level:.2f}** (+{distance:.2f}%) {proximity}")
         else:
-            st.caption("No resistance levels identified")
+            st.caption("⚠️ No se identificaron niveles de resistencia")
 
     with col_levels2:
-        st.markdown("**Support (Below)**")
+        st.markdown("**🟢 Soporte (Abajo)**")
         if levels['support']:
             for i, level in enumerate(levels['support'], 1):
                 distance = ((levels['current_price'] - level) / levels['current_price']) * 100
-                st.write(f"S{i}: **{level:.2f}** (-{distance:.2f}%)")
+                proximity = "🔥 MUY CERCA" if distance < 0.5 else "⚠️ CERCA" if distance < 1.0 else ""
+                st.write(f"S{i}: **${level:.2f}** (-{distance:.2f}%) {proximity}")
         else:
-            st.caption("No support levels identified")
+            st.caption("⚠️ No se identificaron niveles de soporte")
 
     # Section 5: Fibonacci Levels (Collapsible)
     if fib_levels.get('retracements'):
@@ -1413,27 +1622,97 @@ def render_sp500_structure(df: pd.DataFrame):
                 for fib in fib_levels['extensions'][:3]:  # Show 1.272, 1.414, 1.618
                     st.caption(f"{fib['label']}: {fib['price']:.2f}")
 
-    # Section 6: Liquidity Zones
+    # Section 6: Liquidity Zones - Enhanced with Visual Chart
     if liq_zones.get('zones'):
         st.markdown("---")
-        st.subheader("🎯 Liquidity Zones (Stop Loss Clusters)")
+        st.subheader("🎯 Zonas de Liquidez (Clusters de Stop Loss)")
 
-        col_liq1, col_liq2 = st.columns(2)
+        st.caption("💡 Zonas donde se acumulan stop-losses. El precio tiende a buscar estas zonas antes de reversar.")
 
         above_zones = [z for z in liq_zones['zones'] if z['direction'] == 'above'][:3]
         below_zones = [z for z in liq_zones['zones'] if z['direction'] == 'below'][:3]
 
+        # Create visual chart showing liquidity zones
+        current_price = levels.get('current_price', df['SP500'].iloc[-1] if 'SP500' in df.columns else 0)
+
+        zone_names = []
+        zone_distances = []
+        zone_colors = []
+        zone_prices = []
+
+        # Add above zones (Short stops)
+        for i, zone in enumerate(above_zones, 1):
+            zone_names.append(f"Short Stop {i}")
+            distance = ((zone['price'] - current_price) / current_price) * 100
+            zone_distances.append(distance)
+            zone_colors.append('rgba(255, 100, 100, 0.7)')  # Red for shorts
+            zone_prices.append(zone['price'])
+
+        # Add below zones (Long stops)
+        for i, zone in enumerate(below_zones, 1):
+            zone_names.append(f"Long Stop {i}")
+            distance = ((zone['price'] - current_price) / current_price) * 100
+            zone_distances.append(distance)
+            zone_colors.append('rgba(100, 255, 100, 0.7)')  # Green for longs
+            zone_prices.append(zone['price'])
+
+        if zone_names:
+            fig_liq = go.Figure()
+
+            fig_liq.add_trace(go.Scatter(
+                x=zone_distances,
+                y=zone_names,
+                mode='markers',
+                marker=dict(
+                    size=20,
+                    color=zone_colors,
+                    line=dict(color='white', width=2),
+                    symbol='diamond'
+                ),
+                text=[f"${p:.2f}" for p in zone_prices],
+                textposition='middle right',
+                hovertemplate='%{y}: $%{customdata:.2f} (%{x:+.2f}%)<extra></extra>',
+                customdata=zone_prices
+            ))
+
+            # Add current price line
+            fig_liq.add_vline(x=0, line_dash="solid", line_color="blue", line_width=3,
+                             annotation_text="Precio Actual", annotation_position="top")
+
+            fig_liq.update_layout(
+                title="Zonas de Liquidez - Distancia desde Precio Actual",
+                xaxis_title="Distancia (%)",
+                yaxis_title="",
+                height=300,
+                showlegend=False
+            )
+
+            st.plotly_chart(fig_liq, use_container_width=True)
+
+        # Details in columns
+        col_liq1, col_liq2 = st.columns(2)
+
         with col_liq1:
-            st.markdown("**Above (Short Stops)**")
-            st.caption("_Shorts forced to cover when price rallies_")
-            for zone in above_zones:
-                st.caption(f"• {zone['price']:.2f} - {zone['type']}")
+            st.markdown("**🔴 Arriba (Short Stops)**")
+            st.caption("_Cortos forzados a cubrir cuando el precio sube_")
+            if above_zones:
+                for i, zone in enumerate(above_zones, 1):
+                    distance = ((zone['price'] - current_price) / current_price) * 100
+                    proximity = "🔥" if distance < 0.5 else "⚠️" if distance < 1.0 else "•"
+                    st.caption(f"{proximity} **${zone['price']:.2f}** (+{distance:.2f}%) - {zone['type']}")
+            else:
+                st.caption("⚠️ No se encontraron zonas")
 
         with col_liq2:
-            st.markdown("**Below (Long Stops)**")
-            st.caption("_Longs forced to sell when price drops_")
-            for zone in below_zones:
-                st.caption(f"• {zone['price']:.2f} - {zone['type']}")
+            st.markdown("**🟢 Abajo (Long Stops)**")
+            st.caption("_Largos forzados a vender cuando el precio cae_")
+            if below_zones:
+                for i, zone in enumerate(below_zones, 1):
+                    distance = abs((zone['price'] - current_price) / current_price) * 100
+                    proximity = "🔥" if distance < 0.5 else "⚠️" if distance < 1.0 else "•"
+                    st.caption(f"{proximity} **${zone['price']:.2f}** (-{distance:.2f}%) - {zone['type']}")
+            else:
+                st.caption("⚠️ No se encontraron zonas")
 
     # Section 7: Historical Statistics
     if hist_stats:
