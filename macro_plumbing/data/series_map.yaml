@@ -357,6 +357,32 @@ market_indicators:
     transform: level
     winsorize: true
     category: commodities
+  # Treasury Debt Composition - QRA Analysis
+  GFDEBTN:
+    code: GFDEBTN
+    description: Federal Debt - Total Public Debt
+    transform: level
+    winsorize: false
+    category: treasury_debt
+  FDHBFRBN:
+    code: FDHBFRBN
+    description: Federal Debt Held by Federal Reserve Banks
+    transform: level
+    winsorize: false
+    category: treasury_debt
+  FYGFDPUN:
+    code: FYGFDPUN
+    description: Federal Debt Held by the Public
+    transform: level
+    winsorize: false
+    category: treasury_debt
+  GFDEGDQ188S:
+    code: GFDEGDQ188S
+    description: Federal Debt - Total Public Debt as Percent of GDP
+    transform: level
+    winsorize: false
+    category: treasury_debt
+    optional: true
   INDUSTRIAL_PRODUCTION:
     code: INDPRO
     description: Industrial Production Index
@@ -618,6 +644,25 @@ derived_features:
   payrolls_3m_change:
     formula: diff(PAYEMS, periods=3)
     description: 3-Month Change in Nonfarm Payrolls (000s)
+  # QRA Analysis - Treasury Debt Issuance Metrics
+  debt_held_by_public_pct:
+    formula: (FYGFDPUN / GFDEBTN) * 100
+    description: Percentage of total debt held by public (vs Fed)
+  fed_holdings_pct:
+    formula: (FDHBFRBN / GFDEBTN) * 100
+    description: Percentage of total debt held by Federal Reserve
+  debt_issuance_velocity:
+    formula: pct_change(GFDEBTN, periods=20)
+    description: 20-day rate of change in total public debt (issuance velocity)
+  tga_debt_ratio:
+    formula: TGA / GFDEBTN
+    description: Treasury General Account as % of total debt (cash buffer)
+  bills_intensity_proxy:
+    formula: (TB3MS / DGS10) * 100
+    description: Bills issuance intensity proxy (short/long rate ratio)
+  wam_curve_proxy:
+    formula: 50 + (T10Y2Y * 2)
+    description: Weighted Average Maturity proxy based on curve slope
 calendar_events:
   month_end:
     description: Last business day of month
