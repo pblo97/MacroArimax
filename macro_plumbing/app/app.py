@@ -51,6 +51,7 @@ from macro_plumbing.risk.position_overlay import (
 )
 from macro_plumbing.app.components.macro_dashboard import render_macro_dashboard
 from macro_plumbing.app.components.sp500_structure import render_sp500_structure
+from macro_plumbing.app.components.qra_analysis import render_qra_analysis
 
 
 # Page config
@@ -104,7 +105,7 @@ if st.session_state.get('run_analysis', False):
         st.stop()
 
     # Create tabs
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
         "🚦 Semáforo",
         "📊 Detalle Señales",
         "🔗 Mapa Drenajes",
@@ -114,6 +115,7 @@ if st.session_state.get('run_analysis', False):
         "🎯 Ensemble Predictor",
         "🌍 Macro Dashboard",
         "📈 S&P 500 Structure",
+        "📊 QRA Analysis",
     ])
 
     # ==================
@@ -4632,6 +4634,26 @@ if st.session_state.get('run_analysis', False):
             - Calculation errors in market structure analysis
 
             Check that the SP500 series is properly loaded from FRED.
+            """)
+
+    # ==================
+    # Tab 10: QRA Analysis
+    # ==================
+    with tab10:
+        try:
+            render_qra_analysis(df)
+        except Exception as e:
+            st.error(f"Error rendering QRA Analysis: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+            st.markdown("""
+            **Possible causes:**
+            - Missing Treasury data (GFDEBTN, TB3MS, DGS10, T10Y2Y)
+            - Insufficient data points for QRA metrics calculation
+            - Data fetch errors from FRED
+
+            Check that Treasury series are properly loaded from FRED.
+            Required series: GFDEBTN, TB3MS, DGS10, T10Y2Y
             """)
 
 else:
